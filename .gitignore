@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local data: real leases, database, API keys. Never commit these.
+data/
+*.sqlite
+.env
+.streamlit/secrets.toml
+
+# Generated demo files (rebuilt by demo/generate_demo.py)
+demo/output/
+
+# OS
+.DS_Store
