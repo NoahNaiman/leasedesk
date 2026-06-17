@@ -1,3 +1,4 @@
+import io
 from datetime import date
 
 import pandas as pd
@@ -40,6 +41,6 @@ def test_lease_table_and_search(conn):
 def test_excel_export_round_trips(conn):
     df = portfolio.lease_table(approved(conn), TODAY)
     data = portfolio.to_excel({"Leases": df})
-    back = pd.read_excel(data, sheet_name="Leases")
+    back = pd.read_excel(io.BytesIO(data), sheet_name="Leases")
     assert list(back.columns) == list(df.columns)
     assert len(back) == len(df)
