@@ -1,0 +1,16 @@
+[server]
+maxUploadSize = 1000
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#1F6F5C"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F6F5"
+textColor = "#1C2B27"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"

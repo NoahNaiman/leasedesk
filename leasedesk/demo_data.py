@@ -95,7 +95,7 @@ TENANTS: list[DemoTenant] = [
                exclusive_use="Sale of espresso-based beverages as a primary use.",
                co_tenancy="If FreshWay Market ceases operating for more than 180 days, tenant may pay 50% of "
                           "base rent in lieu of rent until a replacement grocer opens, or terminate after 12 months."),
-    DemoTenant("Summit Fitness Partners LLC", "Summit Fitness", "B-130", 6_500, 10, -30, 19.00,
+    DemoTenant("Summit Fitness Partners LLC", "Summit Fitness", "B-130", 6_500, 10, -34, 19.00,
                options=[(OptionType.TERMINATION, 0, "Tenant may terminate effective at the end of lease year 7 "
                          "with 9 months' notice and payment of unamortized tenant improvements.")],
                permitted_use="fitness center and personal training"),
@@ -104,7 +104,7 @@ TENANTS: list[DemoTenant] = [
     DemoTenant("Golden Dragon Kitchen LLC", "Golden Dragon Kitchen", "B-150", 2_400, 10, -62, 30.00,
                percentage_rent_pct=6.0, permitted_use="full-service Chinese restaurant",
                options=[(OptionType.RENEWAL, 60, "Two renewal options of five years at fair market rent.")]),
-    DemoTenant("Paws & Claws Retail Corp.", "Paws & Claws Pet Supply", "C-200", 4_200, 10, -26, 22.00,
+    DemoTenant("Paws & Claws Retail Corp.", "Paws & Claws Pet Supply", "C-200", 4_200, 10, -23, 22.00,
                cam_cap_pct=4.0, cam_cap_type=CapType.NON_CUMULATIVE, permitted_use="pet supplies and grooming",
                co_tenancy="Tenant's rent reduces to 4% of gross sales if FreshWay Market and Brightside "
                           "Pharmacy are both closed for more than 120 consecutive days."),
