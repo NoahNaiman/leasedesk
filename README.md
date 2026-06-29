@@ -6,6 +6,12 @@ AI drafts each abstract, and a person approves it. Every extracted value links b
 
 LeaseDesk was built to help The Robert L Naiman Co LLC with day-to-day property management: checking lease abstracts, tracking critical dates, and calculating partner distributions.
 
+## Background
+
+I built the first version of LeaseDesk in early June 2026: a hand-written prototype, made without AI assistance, to cut down the hours I was spending pulling terms out of our retail leases and checking them against Yardi. Hardware damage later destroyed my laptop, and the prototype was lost with it.
+
+Rather than retype the prototype from memory, I rebuilt LeaseDesk with Claude as a pair programmer. Building the prototype had already taught me what the tool needed to do and where the hard parts were: scanned leases, amendments layered on top of decades-old originals, and recovery terms that differ tenant by tenant. So for the rebuild I focused on the design and on checking results against real leases, and used AI to move faster on the implementation. That made it possible to take the rebuild further than the original: page-level evidence for every extracted value, a review step before anything is trusted, and a repeatable accuracy benchmark. The commit history in this repository covers the rebuild.
+
 ---
 
 ## What it does
