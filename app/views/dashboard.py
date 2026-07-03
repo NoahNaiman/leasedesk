@@ -17,7 +17,7 @@ if not all_records:
     left, right = st.columns(2)
     with left, st.container(border=True):
         st.subheader(":material/storefront: Try the demo")
-        st.write("Load **Willow Creek Commons**, a fictional 86,000 SF shopping center with 12 tenants.")
+        st.write("Load two fictional shopping centers, **Willow Creek Commons** and **Maple Ridge Plaza**, with 12 tenants between them.")
         if st.button("Load demo property", type="primary"):
             with db.connect() as conn, st.spinner("Building demo leases…"):
                 demo_data.load_demo_into_db(conn)

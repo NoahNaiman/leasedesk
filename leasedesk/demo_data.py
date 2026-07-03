@@ -1,4 +1,4 @@
-"""Synthetic demo portfolio: Willow Creek Commons.
+"""Synthetic demo portfolio: Willow Creek Commons and Maple Ridge Plaza.
 
 Every tenant, person, and address here is fictional. The generator writes
 realistic retail lease PDFs (two of them made to look scanned) together with
@@ -38,10 +38,19 @@ from leasedesk.models import (
     RentStep,
 )
 
-PROPERTY_NAME = "Willow Creek Commons"
-PROPERTY_ADDRESS = "4800 Willow Creek Parkway, Fairview, OH 45999"
-LANDLORD = "Willow Creek Commons Owner LLC"
-CENTER_GLA = 86_000
+@dataclass(frozen=True)
+class DemoProperty:
+    name: str
+    address: str
+    landlord: str
+    gla: int  # gross leasable area, the pro-rata share denominator
+
+
+WILLOW_CREEK = DemoProperty("Willow Creek Commons", "4800 Willow Creek Parkway, Fairview, OH 45999",
+                            "Willow Creek Commons Owner LLC", 86_000)
+MAPLE_RIDGE = DemoProperty("Maple Ridge Plaza", "1250 Maple Ridge Road, Fairview, OH 45999",
+                           "Maple Ridge Plaza Partners LLC", 18_500)
+DEMO_PROPERTIES = [WILLOW_CREEK, MAPLE_RIDGE]
 
 # Page layout of every generated lease, used for evidence citations.
 PAGE_BASIC_TERMS = 1
@@ -75,6 +84,7 @@ class DemoTenant:
     deposit_months: float = 1.0
     scanned: bool = False
     review_status: str = "approved"  # or "needs_review" to demo the review queue
+    property: DemoProperty = WILLOW_CREEK
 
 
 TENANTS: list[DemoTenant] = [
@@ -111,14 +121,14 @@ TENANTS: list[DemoTenant] = [
     DemoTenant("Willow Dental Group PC", "Willow Dental Group", "C-210", 2_000, 7, -20, 27.00,
                recovery=RecoveryStructure.MODIFIED_GROSS, base_year=date.today().year - 1,
                permitted_use="general dentistry offices", review_status="needs_review"),
-    DemoTenant("QuickShip Centers LLC", "QuickShip Mailing", "C-220", 1_200, 5, -54, 29.00,
-               permitted_use="shipping, mailbox rental, and printing services"),
-    DemoTenant("Harbor Sleep Co.", "Harbor Mattress", "C-230", 3_800, 7, -82, 20.00,
+    DemoTenant("QuickShip Centers LLC", "QuickShip Mailing", "101", 1_200, 5, -54, 29.00,
+               permitted_use="shipping, mailbox rental, and printing services", property=MAPLE_RIDGE),
+    DemoTenant("Harbor Sleep Co.", "Harbor Mattress", "104", 3_800, 7, -82, 20.00,
                options=[(OptionType.RENEWAL, 36, "One renewal option of three years at fair market rent.")],
-               permitted_use="retail sale of mattresses and bedding"),
-    DemoTenant("Sunrise Bagel Bakery LLC", "Sunrise Bagels", "C-240", 1_500, 5, -52, 31.00, guarantor="Paul Ostrowski",
+               permitted_use="retail sale of mattresses and bedding", property=MAPLE_RIDGE),
+    DemoTenant("Sunrise Bagel Bakery LLC", "Sunrise Bagels", "108", 1_500, 5, -52, 31.00, guarantor="Paul Ostrowski",
                options=[(OptionType.RENEWAL, 60, "One renewal option of five years at 105% of prior rent.")],
-               permitted_use="bagel bakery and café", scanned=True),
+               permitted_use="bagel bakery and café", scanned=True, property=MAPLE_RIDGE),
     DemoTenant("Tri-County Savings Bank", "Tri-County Bank", "PAD-1", 3_500, 15, -90, 42.00,
                escalation_pct=0, deposit_months=0,
                options=[(OptionType.RENEWAL, 60, "Four renewal options of five years each, 10% increase per option.")],
@@ -159,7 +169,7 @@ def build_abstract(t: DemoTenant, today: date) -> LeaseAbstract:
     commencement = _first_of_month(today + relativedelta(months=t.start_offset_months))
     expiration = commencement + relativedelta(years=t.term_years, days=-1)
     schedule = _rent_schedule(t, commencement)
-    share = round(t.square_feet / CENTER_GLA * 100, 2)
+    share = round(t.square_feet / t.property.gla * 100, 2)
 
     options = []
     for opt_type, months, text in t.options:
@@ -186,7 +196,7 @@ def build_abstract(t: DemoTenant, today: date) -> LeaseAbstract:
         structure=t.recovery,
         pro_rata_share_pct=share,
         pro_rata_denominator_notes=f"Tenant's floor area divided by the gross leasable area of the "
-                                   f"Shopping Center, currently {CENTER_GLA:,} square feet.",
+                                   f"Shopping Center, currently {t.property.gla:,} square feet.",
         pays_cam=True,
         pays_taxes=True,
         pays_insurance=True,
@@ -217,12 +227,12 @@ def build_abstract(t: DemoTenant, today: date) -> LeaseAbstract:
                                       confidence=Confidence.MEDIUM))
 
     return LeaseAbstract(
-        landlord=LANDLORD,
+        landlord=t.property.landlord,
         tenant_name=t.tenant_name,
         trade_name=t.trade_name,
         guarantor=t.guarantor,
-        property_name=PROPERTY_NAME,
-        property_address=PROPERTY_ADDRESS,
+        property_name=t.property.name,
+        property_address=t.property.address,
         suite=t.suite,
         square_feet=t.square_feet,
         lease_date=commencement - relativedelta(months=4),
@@ -325,7 +335,7 @@ def render_lease_pdf(a: LeaseAbstract, t: DemoTenant) -> bytes:
                        "monthly estimated installments, subject to annual reconciliation."))
     story.append(P(f"6.2 Proportionate Share. Tenant's Proportionate Share is {r.pro_rata_share_pct}%, being the "
                    f"floor area of the Premises divided by the gross leasable area of the Shopping Center, "
-                   f"currently {CENTER_GLA:,} square feet."))
+                   f"currently {t.property.gla:,} square feet."))
     if r.admin_fee_pct:
         story.append(P(f"6.3 Administrative Fee. Common Area Maintenance Costs shall include an administrative "
                        f"fee equal to {r.admin_fee_pct:g}% of such costs, excluding Taxes and Insurance."))
