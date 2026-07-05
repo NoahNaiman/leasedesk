@@ -21,9 +21,11 @@ Rather than retype the prototype from memory, I rebuilt LeaseDesk with Claude as
 | **Import** | Drag in PDFs or point at a whole folder. Duplicates are detected automatically, and scanned leases are flagged. |
 | **AI abstraction** | Claude reads each lease and fills a structured abstract: parties, premises, term dates, rent schedule, CAM/tax/insurance recoveries (pro-rata share, caps, base year, gross-up, exclusions), percentage rent, options, exclusives, co-tenancy, and radius restrictions. |
 | **Review** | The lease page and the editable abstract sit side by side. Each value cites its page; one click jumps there. Low-confidence values are called out. |
+| **Properties** | Every property with its tenant count, leased square feet, rent, average rent per square foot, and upcoming expirations. Properties recorded under different names (a center name in one lease, a street address in an amendment) can be merged in one step. |
+| **Tenants** | Every tenant, sorted by property, with all of its documents (lease and amendments) grouped together and the newest stated suite, rent, and expiration. |
 | **Lease library** | Search across all approved leases and open a one-page summary. Export everything (leases, rent schedules, options) to Excel. |
 | **Critical dates** | Expirations, option notice deadlines, and rent increases for any window, with urgent deadlines highlighted. Export to Excel or to your calendar, with a reminder two weeks before each option deadline. |
-| **Demo mode** | A fictional 86,000 SF center, Willow Creek Commons, with 12 tenants, so you can explore without real data or an API key. |
+| **Demo mode** | Two fictional shopping centers, Willow Creek Commons and Maple Ridge Plaza, with 12 tenants between them, so you can explore without real data or an API key. |
 
 ## Getting started (no technical experience needed)
 
