@@ -1,6 +1,6 @@
-"""SQLite storage for lease documents and their abstracts.
+"""SQLite storage: properties, the property-folder file index, and lease documents.
 
-One row per uploaded PDF. The AI's first draft is kept in ``ai_abstract_json``
+One row per lease document (a PDF). The AI's first draft is kept in ``ai_abstract_json``
 and never overwritten, while ``abstract_json`` holds the reviewed version.
 Keeping both lets us measure how often the AI needed correcting.
 """
@@ -41,7 +41,48 @@ CREATE TABLE IF NOT EXISTS lease_documents (
     abstracted_at    TEXT,
     reviewed_at      TEXT
 );
+
+-- One row per property folder (the top-level folders in the library folder).
+CREATE TABLE IF NOT EXISTS properties (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    folder_name  TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    excluded     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+);
+
+-- Every file found in the property folders, and what was decided about it.
+-- Unchanged files keep their decision on rescan, so AI triage is never paid for twice.
+CREATE TABLE IF NOT EXISTS file_index (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id   INTEGER NOT NULL REFERENCES properties(id),
+    rel_path      TEXT NOT NULL UNIQUE,
+    size          INTEGER NOT NULL,
+    mtime         REAL NOT NULL,
+    tenant_folder TEXT,
+    decision      TEXT NOT NULL,
+    reason        TEXT,
+    doc_kind      TEXT,
+    tenant_hint   TEXT,
+    decided_by    TEXT NOT NULL DEFAULT 'rules',
+    document_id   INTEGER REFERENCES lease_documents(id),
+    updated_at    TEXT NOT NULL
+);
 """
+
+# Columns added to lease_documents after the first release; added on startup if missing.
+_LEASE_DOCUMENT_MIGRATIONS = {
+    "property_id": "INTEGER REFERENCES properties(id)",
+    "tenant_folder": "TEXT",
+    "source_rel_path": "TEXT",
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(lease_documents)")}
+    for column, decl in _LEASE_DOCUMENT_MIGRATIONS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE lease_documents ADD COLUMN {column} {decl}")
 
 
 @dataclass
@@ -62,6 +103,10 @@ class LeaseRecord:
     created_at: str
     abstracted_at: str | None
     reviewed_at: str | None
+    property_id: int | None = None
+    property_name: str | None = None   # the property's display name, when it came from a folder
+    tenant_folder: str | None = None   # the tenant subfolder it was found in, if any
+    source_rel_path: str | None = None  # path inside the library folder, if read in place
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "LeaseRecord":
@@ -85,6 +130,10 @@ class LeaseRecord:
             created_at=row["created_at"],
             abstracted_at=row["abstracted_at"],
             reviewed_at=row["reviewed_at"],
+            property_id=row["property_id"],
+            property_name=row["property_name"] if "property_name" in row.keys() else None,
+            tenant_folder=row["tenant_folder"],
+            source_rel_path=row["source_rel_path"],
         )
 
 
@@ -100,6 +149,7 @@ def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
     conn.row_factory = sqlite3.Row
     try:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         yield conn
         conn.commit()
     finally:
@@ -115,15 +165,20 @@ def add_document(
     page_count: int | None,
     is_scanned: bool | None,
     is_demo: bool = False,
+    property_id: int | None = None,
+    tenant_folder: str | None = None,
+    source_rel_path: str | None = None,
 ) -> int | None:
     """Insert a new document. Returns its id, or None if it was already imported."""
     try:
         cur = conn.execute(
             """INSERT INTO lease_documents
-               (file_name, file_sha256, stored_path, page_count, is_scanned, status, is_demo, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (file_name, file_sha256, stored_path, page_count, is_scanned, status, is_demo, created_at,
+                property_id, tenant_folder, source_rel_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (file_name, file_sha256, stored_path, page_count,
-             None if is_scanned is None else int(is_scanned), STATUS_PENDING, int(is_demo), _now()),
+             None if is_scanned is None else int(is_scanned), STATUS_PENDING, int(is_demo), _now(),
+             property_id, tenant_folder, source_rel_path),
         )
     except sqlite3.IntegrityError:
         return None
@@ -174,26 +229,93 @@ def reset_to_pending(conn: sqlite3.Connection, doc_id: int) -> None:
 
 
 def delete_document(conn: sqlite3.Connection, doc_id: int) -> None:
+    """Remove a document from LeaseDesk. Files in property folders are never touched; the
+    folder index remembers the removal so a rescan doesn't add the file back."""
+    conn.execute(
+        """UPDATE file_index SET document_id = NULL, decision = 'skipped', reason = 'Removed from LeaseDesk',
+           decided_by = 'manual' WHERE document_id = ?""", (doc_id,))
     conn.execute("DELETE FROM lease_documents WHERE id = ?", (doc_id,))
 
 
+_SELECT_DOCUMENTS = """
+    SELECT d.*, p.display_name AS property_name
+    FROM lease_documents d LEFT JOIN properties p ON p.id = d.property_id
+"""
+
+
 def get_document(conn: sqlite3.Connection, doc_id: int) -> LeaseRecord | None:
-    row = conn.execute("SELECT * FROM lease_documents WHERE id = ?", (doc_id,)).fetchone()
+    row = conn.execute(_SELECT_DOCUMENTS + " WHERE d.id = ?", (doc_id,)).fetchone()
     return LeaseRecord.from_row(row) if row else None
 
 
-def list_documents(conn: sqlite3.Connection, status: str | None = None) -> list[LeaseRecord]:
+def find_document_by_sha(conn: sqlite3.Connection, sha256: str) -> LeaseRecord | None:
+    row = conn.execute(_SELECT_DOCUMENTS + " WHERE d.file_sha256 = ?", (sha256,)).fetchone()
+    return LeaseRecord.from_row(row) if row else None
+
+
+def list_documents(conn: sqlite3.Connection, status: str | None = None,
+                   property_ids: list[int] | None = None) -> list[LeaseRecord]:
+    """Documents, optionally filtered by status and property. Excluded properties are left out."""
+    where, args = ["(p.excluded IS NULL OR p.excluded = 0)"], []
     if status:
-        rows = conn.execute(
-            "SELECT * FROM lease_documents WHERE status = ? ORDER BY id", (status,)
-        ).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM lease_documents ORDER BY id").fetchall()
+        where.append("d.status = ?")
+        args.append(status)
+    if property_ids is not None:
+        where.append(f"d.property_id IN ({','.join('?' * len(property_ids)) or 'NULL'})")
+        args.extend(property_ids)
+    rows = conn.execute(_SELECT_DOCUMENTS + " WHERE " + " AND ".join(where) + " ORDER BY d.id", args).fetchall()
     return [LeaseRecord.from_row(r) for r in rows]
 
 
+def attach_document(conn: sqlite3.Connection, doc_id: int, *, property_id: int,
+                    tenant_folder: str | None, source_rel_path: str) -> None:
+    """Link an already-imported document to the property folder it was found in."""
+    conn.execute(
+        "UPDATE lease_documents SET property_id = ?, tenant_folder = ?, source_rel_path = ? WHERE id = ?",
+        (property_id, tenant_folder, source_rel_path, doc_id),
+    )
+
+
+# --------------------------------------------------------------------------- properties
+
+@dataclass
+class Property:
+    id: int
+    folder_name: str
+    display_name: str
+    excluded: bool
+
+
+def upsert_property(conn: sqlite3.Connection, folder_name: str) -> int:
+    row = conn.execute("SELECT id FROM properties WHERE folder_name = ?", (folder_name,)).fetchone()
+    if row:
+        return row["id"]
+    cur = conn.execute(
+        "INSERT INTO properties (folder_name, display_name, created_at) VALUES (?, ?, ?)",
+        (folder_name, folder_name, _now()),
+    )
+    return cur.lastrowid
+
+
+def list_properties(conn: sqlite3.Connection, include_excluded: bool = False) -> list[Property]:
+    sql = "SELECT * FROM properties" + ("" if include_excluded else " WHERE excluded = 0")
+    rows = conn.execute(sql + " ORDER BY display_name COLLATE NOCASE").fetchall()
+    return [Property(r["id"], r["folder_name"], r["display_name"], bool(r["excluded"])) for r in rows]
+
+
+def rename_property(conn: sqlite3.Connection, property_id: int, display_name: str) -> None:
+    conn.execute("UPDATE properties SET display_name = ? WHERE id = ?", (display_name.strip(), property_id))
+
+
+def set_property_excluded(conn: sqlite3.Connection, property_id: int, excluded: bool) -> None:
+    conn.execute("UPDATE properties SET excluded = ? WHERE id = ?", (int(excluded), property_id))
+
+
 def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    rows = conn.execute("SELECT status, COUNT(*) AS n FROM lease_documents GROUP BY status").fetchall()
+    rows = conn.execute(
+        """SELECT d.status, COUNT(*) AS n FROM lease_documents d
+           LEFT JOIN properties p ON p.id = d.property_id
+           WHERE p.excluded IS NULL OR p.excluded = 0 GROUP BY d.status""").fetchall()
     return {r["status"]: r["n"] for r in rows}
 
 

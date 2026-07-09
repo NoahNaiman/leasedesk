@@ -36,7 +36,9 @@ if record is None and not queue:
 if record is None:
     st.write(f"**{len(queue)}** abstract(s) waiting. Check each value against the lease, fix anything "
              "wrong, then approve it.")
-    labels = {r.id: f"{r.file_name}" for r in queue}
+    queue = sorted(queue, key=lambda r: ((r.property_name or "~").lower(), (r.tenant_folder or "").lower(),
+                                         r.file_name.lower()))
+    labels = {r.id: " › ".join(x for x in (r.property_name, r.tenant_folder, r.file_name) if x) for r in queue}
     current = st.session_state.get("review_current")
     ids = list(labels)
     chosen = st.selectbox("Lease", ids, index=ids.index(current) if current in ids else 0,

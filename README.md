@@ -18,7 +18,7 @@ Rather than retype the prototype from memory, I rebuilt LeaseDesk with Claude as
 
 | | |
 |---|---|
-| **Import** | Drag in PDFs or point at a whole folder. Duplicates are detected automatically, and scanned leases are flagged. |
+| **Import** | Point LeaseDesk at a folder with one subfolder per property. It reads the files in place (nothing is copied) and finds current lease documents (leases, amendments, extensions, assignments, guaranties) by folder and file name, skipping old tenants, insurance certificates, CAM and tax letters, photos, and so on. A fast, inexpensive AI model checks PDFs whose names don't say what they are, and any decision can be corrected by hand. Single PDFs can also be uploaded. |
 | **AI abstraction** | Claude reads each lease and fills a structured abstract: parties, premises, term dates, rent schedule, CAM/tax/insurance recoveries (pro-rata share, caps, base year, gross-up, exclusions), percentage rent, options, exclusives, co-tenancy, and radius restrictions. |
 | **Review** | The lease page and the editable abstract sit side by side. Each value cites its page; one click jumps there. Low-confidence values are called out. |
 | **Properties** | Every property with its tenant count, leased square feet, rent, average rent per square foot, and upcoming expirations. Properties recorded under different names (a center name in one lease, a street address in an amendment) can be merged in one step. |
