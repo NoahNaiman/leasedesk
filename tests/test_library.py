@@ -131,3 +131,20 @@ def test_tenant_folder_groups_documents_with_different_legal_names(conn, library
     groups = portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))
     assert len(groups) == 1 and len(groups[0].records) == 2
     assert groups[0].property == "100 Main Street"
+
+
+def test_copies_of_one_document_are_added_once(conn, tmp_path):
+    root = tmp_path / "Properties"
+    folder = root / "1 Elm Street" / "Valley Barbers"
+    folder.mkdir(parents=True)
+    for name in ("Valley Barbers Lease + Guaranty.pdf", "Valley Barbers Lease + Guaranty_Redacted.pdf",
+                 "Billboard Lease -NikkiLaptop.pdf", "Billboard Lease .pdf",
+                 "Lease.pdf", "Signed Lease.pdf", "First Amendment.pdf", "Second Amendment.pdf",
+                 "Billboard #214 Lease.pdf", "Lease (1).pdf"):
+        (folder / name).write_bytes(b"%PDF-1.4 " + name.encode())
+    library.scan(conn, root)
+    prop = db.list_properties(conn)[0]
+    kept = sorted(f["rel_path"].split("/")[-1] for f in library.files_for_property(conn, prop.id)
+                  if f["decision"] == "lease_doc")
+    assert kept == ["Billboard #214 Lease.pdf", "Billboard Lease .pdf", "First Amendment.pdf", "Second Amendment.pdf",
+                    "Signed Lease.pdf", "Valley Barbers Lease + Guaranty.pdf"]

@@ -186,7 +186,8 @@ class TenantGroup:
 
     @property
     def name(self) -> str:
-        return tenant_label(self.primary.abstract)
+        """The newest trade name in any document, else the main document's legal name."""
+        return self.latest(lambda a: a.trade_name) or tenant_label(self.primary.abstract)
 
     def latest(self, value: Callable[[LeaseAbstract], object]):
         """The value from the newest document that states it.
@@ -209,6 +210,19 @@ def tenant_groups(records: list[LeaseRecord]) -> list[TenantGroup]:
     return sorted(groups.values(), key=lambda g: (_property_sort(g.property), g.name.lower()))
 
 
+STATUS_ACTIVE = "Active"
+STATUS_EXPIRED = "Expired per documents"
+STATUS_UNKNOWN = "No expiration found"
+
+
+def tenant_status(expiration: date | None, today: date) -> str:
+    """Whether the documents on file still cover today. An expired status usually means a
+    renewal or extension that isn't on file yet (or a tenant that has left)."""
+    if expiration is None:
+        return STATUS_UNKNOWN
+    return STATUS_ACTIVE if expiration >= today else STATUS_EXPIRED
+
+
 def tenant_table(groups: list[TenantGroup], today: date) -> pd.DataFrame:
     """One row per tenant per property, sorted by property and then tenant."""
     rows = []
@@ -224,6 +238,7 @@ def tenant_table(groups: list[TenantGroup], today: date) -> pd.DataFrame:
             "Monthly rent": g.latest(lambda a: a.current_monthly_rent(today)),
             "Expiration": expiration,
             "Months left": _months_left(expiration, today),
+            "Status": tenant_status(expiration, today),
             "Guarantor": g.latest(lambda a: a.guarantor),
             "Documents": len(g.records),
         })

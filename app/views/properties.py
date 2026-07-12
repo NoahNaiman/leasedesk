@@ -75,7 +75,7 @@ tenants = portfolio.tenant_table(members, today)
 pick = st.dataframe(
     tenants, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
     key=f"tenants-{prop}",
-    column_order=["Tenant", "Suite", "SF", "Monthly rent", "Expiration", "Months left", "Documents"],
+    column_order=["Tenant", "Suite", "SF", "Monthly rent", "Expiration", "Months left", "Status", "Documents"],
     column_config={"SF": st.column_config.NumberColumn(format="%,d"),
                    "Monthly rent": st.column_config.NumberColumn(format="dollar"),
                    "Expiration": st.column_config.DateColumn(format="MMM D, YYYY")},

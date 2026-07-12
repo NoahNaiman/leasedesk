@@ -37,6 +37,8 @@ dollars per square foot. If only one of those is stated, compute the other from 
 share, the denominator, caps (and whether cumulative), base year, admin fee, gross-up, and exclusions.
 - If this document is an amendment, assignment, or guaranty rather than an original lease, \
 set document_type accordingly and fill in only what this document establishes or changes.
+- If the file contains the original lease together with later amendments, set document_type to \
+"lease" and abstract the terms as amended, noting each amendment in notes.
 - For each important value, add an evidence entry with the 1-based PDF page number, a short \
 verbatim quote, and your confidence. Use "low" confidence for anything hard to read, ambiguous, \
 or computed rather than stated.

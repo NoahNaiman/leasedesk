@@ -131,3 +131,9 @@ def test_tenant_label_drops_entity_description():
     assert portfolio.tenant_label(_abstract(tenant_name="Acme, LLC, an Ohio limited liability company")) \
         == "Acme, LLC"
     assert portfolio.tenant_label(_abstract(tenant_name="X Corp", trade_name="X Store")) == "X Store"
+
+
+def test_tenant_status_flags_documents_that_have_run_out():
+    assert portfolio.tenant_status(date(2030, 1, 1), TODAY) == portfolio.STATUS_ACTIVE
+    assert portfolio.tenant_status(date(2019, 8, 31), TODAY) == portfolio.STATUS_EXPIRED
+    assert portfolio.tenant_status(None, TODAY) == portfolio.STATUS_UNKNOWN
