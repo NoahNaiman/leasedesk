@@ -113,8 +113,11 @@ def record_property(r: LeaseRecord) -> str:
 
 
 def _record_tenant_key(r: LeaseRecord) -> str:
-    """A tenant's subfolder groups its documents even when names vary between them
-    (e.g. an assignment to a new legal entity). Otherwise group by legal name."""
+    """A tenant chosen by hand wins. Otherwise a tenant's subfolder groups its documents even
+    when names vary between them (e.g. an assignment to a new legal entity), and documents
+    outside a tenant folder group by legal name."""
+    if r.tenant_override:
+        return "manual:" + re.sub(r"[^a-z0-9]", "", r.tenant_override.lower())
     if r.tenant_folder:
         return "folder:" + re.sub(r"[^a-z0-9]", "", r.tenant_folder.lower())
     return _tenant_key(r.abstract)
@@ -186,8 +189,10 @@ class TenantGroup:
 
     @property
     def name(self) -> str:
-        """The newest trade name in any document, else the main document's legal name."""
-        return self.latest(lambda a: a.trade_name) or tenant_label(self.primary.abstract)
+        """A name chosen by hand, else the newest trade name in any document, else the main
+        document's legal name."""
+        manual = next((r.tenant_override for r in self.records if r.tenant_override), None)
+        return manual or self.latest(lambda a: a.trade_name) or tenant_label(self.primary.abstract)
 
     def latest(self, value: Callable[[LeaseAbstract], object]):
         """The value from the newest document that states it.

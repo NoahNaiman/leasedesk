@@ -137,3 +137,23 @@ def test_tenant_status_flags_documents_that_have_run_out():
     assert portfolio.tenant_status(date(2030, 1, 1), TODAY) == portfolio.STATUS_ACTIVE
     assert portfolio.tenant_status(date(2019, 8, 31), TODAY) == portfolio.STATUS_EXPIRED
     assert portfolio.tenant_status(None, TODAY) == portfolio.STATUS_UNKNOWN
+
+
+def test_documents_in_one_folder_can_be_split_into_tenants(conn):
+    from leasedesk.models import LeaseAbstract
+
+    ids = []
+    for n, name in enumerate(("Billboard #214 Lease.pdf", "Billboard #2352 Lease.pdf")):
+        doc_id = db.add_document(conn, file_name=name, file_sha256=name, stored_path=name, page_count=1,
+                                 is_scanned=False, tenant_folder="Billboard Leases")
+        db.save_review(conn, doc_id, LeaseAbstract(tenant_name="Skyline Billboards LLC"), approve=True)
+        ids.append(doc_id)
+    assert len(portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))) == 1
+
+    db.set_tenant_override(conn, ids[0], "Billboard B (#214)")
+    db.set_tenant_override(conn, ids[1], "Billboard A (#2352)")
+    groups = portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))
+    assert sorted(g.name for g in groups) == ["Billboard A (#2352)", "Billboard B (#214)"]
+
+    db.set_tenant_override(conn, ids[0], "")  # clearing returns it to the folder's tenant
+    assert db.get_document(conn, ids[0]).tenant_override is None

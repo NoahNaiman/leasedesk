@@ -75,6 +75,7 @@ _LEASE_DOCUMENT_MIGRATIONS = {
     "property_id": "INTEGER REFERENCES properties(id)",
     "tenant_folder": "TEXT",
     "source_rel_path": "TEXT",
+    "tenant_override": "TEXT",
 }
 
 
@@ -107,6 +108,7 @@ class LeaseRecord:
     property_name: str | None = None   # the property's display name, when it came from a folder
     tenant_folder: str | None = None   # the tenant subfolder it was found in, if any
     source_rel_path: str | None = None  # path inside the library folder, if read in place
+    tenant_override: str | None = None  # tenant chosen by hand; groups documents across folders
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "LeaseRecord":
@@ -134,6 +136,7 @@ class LeaseRecord:
             property_name=row["property_name"] if "property_name" in row.keys() else None,
             tenant_folder=row["tenant_folder"],
             source_rel_path=row["source_rel_path"],
+            tenant_override=row["tenant_override"],
         )
 
 
@@ -274,6 +277,12 @@ def attach_document(conn: sqlite3.Connection, doc_id: int, *, property_id: int,
         "UPDATE lease_documents SET property_id = ?, tenant_folder = ?, source_rel_path = ? WHERE id = ?",
         (property_id, tenant_folder, source_rel_path, doc_id),
     )
+
+
+def set_tenant_override(conn: sqlite3.Connection, doc_id: int, tenant: str | None) -> None:
+    """File a document under a tenant by hand (None returns it to its folder's tenant)."""
+    value = tenant.strip() if tenant and tenant.strip() else None
+    conn.execute("UPDATE lease_documents SET tenant_override = ? WHERE id = ?", (value, doc_id))
 
 
 # --------------------------------------------------------------------------- properties

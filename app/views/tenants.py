@@ -1,5 +1,6 @@
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from app import lease_summary, ui
@@ -70,5 +71,25 @@ with st.container(border=True):
                    f"{group.primary.abstract.document_type.value} dated "
                    f"{ui.fmt_date(group.primary.abstract.lease_date)}; amendments are not yet merged into them, "
                    "so check each amendment's abstract for what it changed.")
+
+with st.expander("Split or regroup these documents"):
+    st.write("If one folder holds documents for more than one tenant (two billboards, for example), "
+             "type the tenant each document belongs to. Using the same name for documents groups them; "
+             "the name of another tenant at this property moves a document there. Leave it blank to "
+             "use the folder's tenant. Your files are not changed.")
+    frame = pd.DataFrame([{"id": r.id, "File": r.file_name, "Tenant": r.tenant_override or ""}
+                          for r in ordered])
+    edited = st.data_editor(frame, hide_index=True, width="stretch", key=f"regroup-{group.key}",
+                            disabled=["File"], column_order=["File", "Tenant"],
+                            column_config={"Tenant": st.column_config.TextColumn(
+                                help="Blank = the tenant of the folder the file is in")})
+    changes = edited[edited["Tenant"].fillna("") != frame["Tenant"]]
+    if not changes.empty and st.button("Apply", type="primary", key=f"regroup-apply-{group.key}"):
+        with db.connect() as conn:
+            for _, row in changes.iterrows():
+                db.set_tenant_override(conn, int(row["id"]), row["Tenant"])
+        st.session_state.pop("tenant_key", None)
+        st.toast("Documents regrouped.", icon=":material/check:")
+        st.rerun()
 
 lease_summary.render(group.primary, today)
