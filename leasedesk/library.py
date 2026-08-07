@@ -50,7 +50,7 @@ _SKIP_FOLDER = re.compile(
     r"partners?|partnerships?|parternship|joint venture|operating agreements?|waivers?|"
     r"photos?|pics|pictures|surveys?|title|environmental|enviro|roof\w*|plans|drawings|"
     r"ach|sales?|purchase|appraisals?|correspondence|invoices?|utilities|storm drainage|"
-    r"requested items|bank|loan|financing|expired|defunct|due diligence|listings?|vacated|terminated|"
+    r"requested items|expired|defunct|due diligence|listings?|vacated|terminated|"
     r"moved out|closed)\b",
     re.IGNORECASE,
 )

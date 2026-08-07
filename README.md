@@ -89,9 +89,35 @@ This abstracts all 12 demo leases (two of them scans) and reports per-field accu
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/pytest            # offline; the Anthropic API is mocked
+.venv/bin/pytest            # 75 tests, offline; the Anthropic API is mocked
 .venv/bin/streamlit run app/main.py
 ```
+
+### Sandbox
+
+Double-click **`Start LeaseDesk Sandbox.command`** to open the app on a fresh, fictional workspace
+(`scripts/build_sandbox.py` builds it into `sandbox/`). Your real data is never touched, and the
+sandbox has no API key, so nothing it does costs money.
+
+The sandbox has two properties laid out the way real property folders are:
+
+- tenant subfolders with leases, amendments, and guaranties
+- an old tenant, insurance certificates, CAM and tax letters, a partnership agreement, photos, a Word letter, and a redacted copy
+- a scan with a meaningless name, and an excluded property
+
+Its database has documents in every state (approved, waiting for review, waiting to be abstracted,
+failed). Every generated file records the decision the folder scanner should make, so the sandbox
+is also the scanner's answer key.
+
+### Tests
+
+| File | What it covers |
+|---|---|
+| `test_library.py` | Folder rules, rescans, manual overrides, copies, excluded properties, removal |
+| `test_sandbox.py` | The scanner against the sandbox's answer key; grouping and amendments end to end |
+| `test_pages.py` | Renders every page headlessly against the sandbox and clicks through search, scanning, approving, and removing |
+| `test_extraction.py`, `test_wire_format.py` | The Claude call against a fake API server, and the schema sent to it |
+| `test_portfolio.py`, `test_db.py`, `test_evaluation.py`, `test_demo_data.py` | Tables, critical dates, exports, storage, scoring, demo data |
 
 ## Roadmap
 
