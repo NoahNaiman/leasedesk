@@ -25,3 +25,16 @@ def test_detects_wrong_values_and_tolerates_formatting():
     assert "square_feet" in wrong
     assert f"base_rent_schedule[{expected.base_rent_schedule[2].start_date}]" in wrong
     assert "options.count" in wrong
+
+
+def test_names_and_suites_match_without_entity_descriptions_or_prefixes():
+    from leasedesk.models import LeaseAbstract
+
+    expected = LeaseAbstract(tenant_name="Kettle & Crumb Bakery, Inc.", suite="104", guarantor="Margaret Ellison")
+    actual = LeaseAbstract(tenant_name="Kettle & Crumb Bakery, Inc., a Colorado corporation", suite="Suite 104",
+                           guarantor="Margaret Ellison, an individual")
+    results = {r.field: r.correct for r in evaluation.compare(expected, actual)}
+    assert results["tenant_name"] and results["suite"] and results["guarantor"]
+    wrong = LeaseAbstract(tenant_name="Kettle and Crumb LLC", suite="105", guarantor="Mark Ellison")
+    results = {r.field: r.correct for r in evaluation.compare(expected, wrong)}
+    assert not (results["tenant_name"] or results["suite"] or results["guarantor"])
