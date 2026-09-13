@@ -6,8 +6,11 @@ Two sets:
             formula dates, struck-through corrections, a degraded 16-page scan, distractor
             figures, a lease and amendment in one file...). See leasedesk/benchmark_hard.py.
 
-Usage (costs about $1.40 for standard, $2-3 for hard):
+Usage (costs about $1.40 for standard, about $1 for hard):
     .venv/bin/python scripts/evaluate_extraction.py [--set standard|hard|all]
+
+Re-score a saved run for free (after changing answer keys, scoring, or conventions):
+    .venv/bin/python scripts/evaluate_extraction.py --rescore benchmark_results/<run>
 
 The API key comes from ANTHROPIC_API_KEY or the app's Settings page.
 """
@@ -33,6 +36,23 @@ def cases_for(name: str) -> list[tuple[str, bytes, object]]:
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "benchmark_results"
 
 
+def rescore_set(name: str, saved: Path) -> dict:
+    """Score saved AI answers against the current answer keys, applying today's conventions."""
+    from leasedesk.models import LeaseAbstract
+
+    outcomes = []
+    for file_name, _, expected in cases_for(name):
+        path = saved / f"{Path(file_name).stem}.json"
+        if not path.exists():
+            missed = [evaluation.FieldResult(f.field, f.expected, None, False)
+                      for f in evaluation.compare(expected, expected)]
+            outcomes.append((file_name, missed, "no saved answer", 0.0))
+            continue
+        actual = extraction.apply_conventions(LeaseAbstract.model_validate_json(path.read_text()))
+        outcomes.append((file_name, evaluation.compare(expected, actual), None, 0.0))
+    return report(name, outcomes, rescored=True)
+
+
 def run_set(name: str, client, save_to: Path | None = None) -> dict:
     """Abstract every lease in the set and score it. The AI's raw answers are saved to
     ``save_to`` so a run can be re-scored later without paying for it again."""
@@ -56,8 +76,11 @@ def run_set(name: str, client, save_to: Path | None = None) -> dict:
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             outcomes = list(pool.map(one, cases))
+    return report(name, outcomes)
 
-    print(f"\n=== {name} set ({len(cases)} leases) ===")
+
+def report(name: str, outcomes: list, rescored: bool = False) -> dict:
+    print(f"\n=== {name} set ({len(outcomes)} leases){' (re-scored from saved answers)' if rescored else ''} ===")
     misses: Counter[str] = Counter()
     correct = total = 0
     per_lease, cost = [], 0.0
@@ -87,13 +110,20 @@ def run_set(name: str, client, save_to: Path | None = None) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--set", choices=["standard", "hard", "all"], default="all")
+    parser.add_argument("--rescore", type=Path, help="a saved run folder in benchmark_results/ (free)")
     args = parser.parse_args()
+    sets = ["standard", "hard"] if args.set == "all" else [args.set]
+    if args.rescore:
+        results = [rescore_set(name, args.rescore / name) for name in sets if (args.rescore / name).is_dir()]
+        if not results:
+            print(f"No saved answers found in {args.rescore}")
+            return 1
+        return 0
     key = settings.get_api_key()
     if not key:
         print("Set ANTHROPIC_API_KEY or save a key in the app's Settings page first.")
         return 1
     client = extraction.make_client(key)
-    sets = ["standard", "hard"] if args.set == "all" else [args.set]
     from datetime import datetime
 
     run_dir = RESULTS_DIR / datetime.now().strftime("%Y-%m-%d_%H%M%S")
