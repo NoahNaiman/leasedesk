@@ -1,6 +1,24 @@
 import importlib
+import socket
 
 import pytest
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_real_connect = socket.socket.connect
+
+
+def _guarded_connect(sock, address):
+    host = address[0] if isinstance(address, tuple) else address
+    if sock.family == socket.AF_UNIX or host in _LOCAL_HOSTS:
+        return _real_connect(sock, address)
+    raise RuntimeError(f"Tests must not use the network (tried to connect to {host}). "
+                       "Mock the API with httpx MockTransport instead.")
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Every test runs offline: any connection off this machine fails the test."""
+    monkeypatch.setattr(socket.socket, "connect", _guarded_connect)
 
 
 @pytest.fixture
