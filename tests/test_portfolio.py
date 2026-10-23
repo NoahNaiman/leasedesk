@@ -143,7 +143,7 @@ def test_documents_in_one_folder_can_be_split_into_tenants(conn):
     from leasedesk.models import LeaseAbstract
 
     ids = []
-    for n, name in enumerate(("Billboard #214 Lease.pdf", "Billboard #2352 Lease.pdf")):
+    for name in ("Billboard #214 Lease.pdf", "Billboard #2352 Lease.pdf"):
         doc_id = db.add_document(conn, file_name=name, file_sha256=name, stored_path=name, page_count=1,
                                  is_scanned=False, tenant_folder="Billboard Leases")
         db.save_review(conn, doc_id, LeaseAbstract(tenant_name="Skyline Billboards LLC"), approve=True)

@@ -43,7 +43,8 @@ def render(record: LeaseRecord, today: date) -> None:
             st.dataframe(
                 pd.DataFrame([{"Start": s.start_date, "End": s.end_date, "Monthly": s.monthly_rent,
                                "$/SF/yr": s.annual_rent_psf,
-                               "Current": "◀" if (s.start_date or date.min) <= today <= (s.end_date or date.max) else ""}
+                               "Current": "◀" if (s.start_date or date.min) <= today <= (s.end_date or date.max)
+                               else ""}
                               for s in a.base_rent_schedule]),
                 hide_index=True, width="stretch",
                 column_config={"Start": st.column_config.DateColumn(format="MM/DD/YYYY"),
@@ -58,8 +59,11 @@ def render(record: LeaseRecord, today: date) -> None:
         r = a.recoveries
         with st.container(border=True):
             st.markdown("**Recoveries**")
-            passes = [n for n, v in (("CAM", r.pays_cam), ("taxes", r.pays_taxes), ("insurance", r.pays_insurance)) if v]
-            st.markdown(f"Structure: {r.structure.value.replace('_', ' ').upper() if r.structure.value == 'nnn' else r.structure.value.replace('_', ' ').title()}  \n"
+            paid = (("CAM", r.pays_cam), ("taxes", r.pays_taxes), ("insurance", r.pays_insurance))
+            passes = [n for n, v in paid if v]
+            label = r.structure.value.replace("_", " ")
+            structure = label.upper() if r.structure.value == "nnn" else label.title()
+            st.markdown(f"Structure: {structure}  \n"
                         f"Pays: {', '.join(passes) or '—'}  \n"
                         f"Pro-rata share: {ui.pct(r.pro_rata_share_pct)}  \n"
                         f"CAM cap: {ui.pct(r.cam_cap_pct)}"

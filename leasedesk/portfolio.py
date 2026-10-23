@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import io
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Callable
 
 import pandas as pd
 

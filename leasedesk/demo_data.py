@@ -38,6 +38,7 @@ from leasedesk.models import (
     RentStep,
 )
 
+
 @dataclass(frozen=True)
 class DemoProperty:
     name: str
@@ -95,7 +96,8 @@ TENANTS: list[DemoTenant] = [
                exclusive_use="Sale of fresh meat, produce, and groceries for off-premises consumption."),
     DemoTenant("Brightside Drug Stores LLC", "Brightside Pharmacy", "A-110", 12_000, 15, -70, 21.50,
                escalation_pct=0, cam_cap_pct=5.0, cam_cap_type=CapType.CUMULATIVE,
-               options=[(OptionType.RENEWAL, 60, "Three renewal options of five years each; rent increases 10% per option.")],
+               options=[(OptionType.RENEWAL, 60,
+                         "Three renewal options of five years each; rent increases 10% per option.")],
                permitted_use="retail pharmacy and convenience goods",
                exclusive_use="Operation of a pharmacy filling prescriptions."),
     DemoTenant("Copper Kettle Coffee Co.", "Copper Kettle Coffee", "B-120", 1_800, 10, -40, 38.00,

@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt ruff==0.17.4
+      - name: Lint
+        run: ruff check .
+      # Fully offline: the API is mocked and tests fail on any network connection. This also
+      # checks the committed benchmark receipt matches the current prompt, schema and model.
+      - name: Test
+        run: pytest -q

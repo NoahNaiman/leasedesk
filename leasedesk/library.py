@@ -28,12 +28,12 @@ import base64
 import io
 import json
 import re
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Callable
 
 import anthropic
 from pydantic import BaseModel, Field

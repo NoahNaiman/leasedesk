@@ -1,166 +1,232 @@
 # LeaseDesk
 
-**AI-assisted lease administration for retail shopping centers.** LeaseDesk reads lease PDFs (digital or scanned), extracts the terms a property manager actually needs, and keeps them in a searchable library with a calendar of every expiration, option deadline, and rent increase.
+[![tests](https://github.com/NoahNaiman/leasedesk/actions/workflows/tests.yml/badge.svg)](https://github.com/NoahNaiman/leasedesk/actions/workflows/tests.yml)
 
-AI drafts each abstract, and a person approves it. Every extracted value links back to the page and quote it came from, so checking a lease takes minutes instead of an hour.
+LeaseDesk extracts the terms of commercial retail leases from PDF files using the Anthropic API.
+It handles both scanned and digital leases. Each term is validated against a Pydantic schema and
+linked to the page and quote it came from. A person reviews each abstract, side by side with the
+lease, before it is used. Approved abstracts feed a searchable lease library and a calendar of
+expirations, option deadlines and rent increases, exportable to Excel and to calendar apps.
 
-LeaseDesk was built to help The Robert L Naiman Co LLC with day-to-day property management: checking lease abstracts, tracking critical dates, and calculating partner distributions.
+LeaseDesk is in use at a small commercial real estate company. It is being rolled out across the
+company's retail lease portfolio, one property at a time: so far, one of 31 properties (22 lease
+documents) has been abstracted.
 
-## Background
+## Sample output
 
-I built the first version of LeaseDesk in early June 2026: a hand-written prototype, made without AI assistance, to cut down the hours I was spending pulling terms out of our retail leases and checking them against Yardi. Hardware damage later destroyed my laptop, and the prototype was lost with it.
+From one of the benchmark's synthetic leases: a seven-year lease whose pro-rata share is given only
+as a formula (2,760 SF ÷ 64,200 SF) and whose CAM cap is described without the word "cumulative".
+The values below are the AI's actual answer from the November 11, 2026 benchmark run, abridged.
 
-Rather than retype the prototype from memory, I rebuilt LeaseDesk with Claude as a pair programmer. Building the prototype had already taught me what the tool needed to do and where the hard parts were: scanned leases, amendments layered on top of decades-old originals, and recovery terms that differ tenant by tenant. So for the rebuild I focused on the design and on checking results against real leases, and used AI to move faster on the implementation. That made it possible to take the rebuild further than the original: page-level evidence for every extracted value, a review step before anything is trusted, and a repeatable accuracy benchmark. The commit history in this repository covers the rebuild.
-
----
-
-## What it does
-
-| | |
-|---|---|
-| **Import** | Point LeaseDesk at a folder with one subfolder per property. It reads the files in place (nothing is copied) and finds current lease documents (leases, amendments, extensions, assignments, guaranties) by folder and file name, skipping old tenants, insurance certificates, CAM and tax letters, photos, and so on. A fast, inexpensive AI model checks PDFs whose names don't say what they are, and any decision can be corrected by hand. Single PDFs can also be uploaded. |
-| **AI abstraction** | Claude reads each lease and fills a structured abstract: parties, premises, term dates, rent schedule, CAM/tax/insurance recoveries (pro-rata share, caps, base year, gross-up, exclusions), percentage rent, options, exclusives, co-tenancy, and radius restrictions. |
-| **Review** | The lease page and the editable abstract sit side by side. Each value cites its page; one click jumps there. Low-confidence values are called out. |
-| **Properties** | Every property with its tenant count, leased square feet, rent, average rent per square foot, and upcoming expirations. Properties recorded under different names (a center name in one lease, a street address in an amendment) can be merged in one step. |
-| **Tenants** | Every tenant, sorted by property, with all of its documents (lease and amendments) grouped together and the newest stated suite, rent, and expiration. |
-| **Lease library** | Search across all approved leases and open a one-page summary. Export everything (leases, rent schedules, options) to Excel. |
-| **Critical dates** | Expirations, option notice deadlines, and rent increases for any window, with urgent deadlines highlighted. Export to Excel or to your calendar, with a reminder two weeks before each option deadline. |
-| **Demo mode** | Two fictional shopping centers, Willow Creek Commons and Maple Ridge Plaza, with 12 tenants between them, so you can explore without real data or an API key. |
-
-## Getting started (no technical experience needed)
-
-1. Install Python 3 from [python.org](https://www.python.org/downloads/) if you don't have it.
-2. Double-click **`Start LeaseDesk.command`**. The first launch installs everything it needs (about a minute). After that, it opens in your browser right away.
-   - If macOS says the file can't be opened because it's from an unidentified developer, right-click it, choose **Open**, then **Open** again.
-3. Click **Load demo property** to explore, or go to **Settings** and add an [Anthropic API key](https://console.anthropic.com) to abstract your own leases.
-
-Close the Terminal window to stop LeaseDesk. All data stays in the `data/` folder on your computer.
-
-## How it works
-
-```
- PDF (digital or scanned)
-        │  hash → dedupe, detect scan
-        ▼
- data/documents/<sha256>.pdf ──► Claude (PDF document input + structured output)
-                                        │  validated LeaseAbstract (Pydantic)
-                                        ▼
-                        SQLite: ai_abstract_json (kept as-is)
-                                abstract_json   (human-reviewed)
-                                        │  approve
-                                        ▼
-                Library · Critical dates · Excel / .ics exports
+```text
+Tenant            Summit Optical Group PC (d/b/a Summit Eyecare), Unit E-5, 2,760 SF
+Term              2025-05-01 to 2032-04-30
+Base rent         $6,612.50/mo from 2025-05-01; $7,130.00/mo from 2029-05-01
+Recoveries        NNN; pro-rata share 4.30%; CAM cap 4% cumulative; admin fee 10%; gross-up 95%
+Renewal option    5 years; notice deadline 2031-08-04
+Deposit           $6,612.50
 ```
 
+Each value carries its evidence, for example:
+
+| Field | Page | Confidence | Quote from the lease |
+|---|---|---|---|
+| `recoveries.pro_rata_share_pct` | 1 | low | "the denominator of which is the floor area of all leasable buildings in the Shopping Center, currently 64,200 square feet" |
+| `recoveries.cam_cap_type` | 1 | medium | "shall not exceed Tenant's Share of Controllable Operating Costs for the first full calendar year of the Term, increased by four percent (4%) per year, compounded annually" |
+| `recoveries.admin_fee_pct` | 1 | high | "a management fee equal to ten percent (10%) of Operating Costs, excluding Taxes and Insurance" |
+| `security_deposit` | 1 | low | "an amount equal to one month of Base Rent at the initial rate." |
+
+Values that were computed rather than stated, such as the 4.30% share and the deposit, come back as
+low confidence. The review screen highlights them.
+
+## Architecture
+
+```text
+property folders ──► library.py: index files, pick out lease documents (rules + small-model triage)
+                          │
+                          ▼
+             extraction.py: PDF → Claude (claude-opus-5-5), structured output
+                          │   wire_format.py: compact schema out, full model back
+                          ▼
+             models.py: LeaseAbstract (Pydantic), with FieldEvidence per key value
+                          │
+                          ▼
+             db.py (SQLite): ai_abstract_json (AI draft, never edited)
+                             abstract_json    (human-reviewed)
+                          │  approve
+                          ▼
+             portfolio.py: properties, tenants, critical dates, Excel and .ics export
+             corrections.py: how often reviewers changed the AI draft
 ```
-leasedesk/            core logic, no UI code
-  models.py           LeaseAbstract schema: the single source of truth
-  extraction.py       Claude call, error handling, parallel batch processing
-  wire_format.py      compact schema sent to the API, and conversion back
-  documents.py        PDF import, dedupe, scanned-page detection
-  db.py               SQLite storage
-  portfolio.py        lease table, critical dates, Excel and calendar export
-  evaluation.py       field-by-field accuracy scoring
-  demo_data.py        generates the demo leases and their correct abstracts
-app/                  Streamlit UI (one file per page)
-scripts/              evaluate_extraction.py
-tests/                pytest suite (runs offline against a mocked API)
-```
 
-### Design decisions
+- **UI:** Streamlit, under `app/` (one file per page).
+- **PDFs:** files are read in place; nothing is copied. Claude receives each PDF as both text and
+  page images, so scanned leases need no separate OCR step.
 
-- **The schema drives everything.** One Pydantic model defines what Claude must return (via structured outputs), what gets stored, and what the review form edits. Adding a field means changing one class.
-- **A wire format for the API.** Structured outputs compile the schema into a grammar with a size cap, and a lease abstract's dozens of optional fields exceed it. `wire_format.py` sends every optional value as a string ("" means not stated) and converts the reply back before validation, so the rest of the app only ever sees the real model.
-- **AI drafts, people approve.** Nothing reaches the library until a person approves it. The AI's original draft is stored separately from the reviewed version, so correction rates can be measured over time.
-- **Evidence for every value.** The model must cite a page number, a verbatim quote, and a confidence level for each important term. That turns review into verification instead of re-reading.
-- **No separate OCR step.** Claude reads PDFs as both text and page images, so scanned leases go through the same path as digital ones.
-- **Demo data with an answer key.** The demo generator produces each lease PDF *and* its correct abstract. That powers the demo, and it gives a repeatable benchmark for extraction accuracy (`scripts/evaluate_extraction.py`) so prompt or model changes can be measured, not guessed at.
-- **Local-first.** One user, one machine: SQLite and a folder of PDFs, no server to maintain. Lease text leaves the computer only when you click **Abstract**.
-
-## Measuring accuracy
-
-```bash
-.venv/bin/python scripts/evaluate_extraction.py --set all   # or --set standard / --set hard
-.venv/bin/python scripts/evaluate_extraction.py --rescore benchmark_results/<run>   # free
-```
-
-Two sets of fictional leases with known-correct abstracts. Every field is scored, and a failed extraction counts as every field missed.
-
-| Set | What it is | Latest result |
-|---|---|---|
-| **Standard** | The 12 demo leases: clean, one layout. Mostly a regression check. | 100% (338/338 fields), $1.36 |
-| **Hard** | 10 leases, each built around a known difficulty (see below). | 100% (249/249) after the rent commencement convention; 97.6% before, $1.04 |
-
-The hard leases cover:
-
-- rent described in prose
-- dates written in words or set by formula
-- notice windows in months
-- a lease and amendment in one file
-- struck-through, hand-initialed corrections
-- a degraded 16-page scan with terms buried in later articles
-- a pro-rata share defined only as a formula
-- an indirectly described cumulative cap
-- annual-only rent with a base year
-- distractor figures
-- a guarantor named only in an exhibit
-
-`tests/test_benchmark_hard.py` checks each answer key against its own PDF offline.
-
-All 6 misses in the first hard-set run were one convention. When a lease never states a separate rent commencement date, the answer key used the commencement date; the AI left it blank, and not consistently. That convention is now applied in code after extraction (leases only), and the saved answers re-score to 100%. Every rent, date, share, cap and deadline was already correct.
-
-Both sets now score 100%, so they no longer tell versions apart. They remain useful as regression checks.
-
-Building the hard set also turned up three errors in the answer keys, each fixed and covered by a test:
-
-- a leap-year option deadline
-- two leases marked triple-net whose text never said so
-
-Raw AI answers from each run are saved in `benchmark_results/` (git-ignored), so a run can be re-scored without paying again.
-
-**What these numbers don't show:** the leases are generated, and the same person who wrote them wrote the answer keys. Real leases add things no generator covers: decades-old scans, handwriting in margins, terms split across amendments, and genuinely ambiguous drafting. The honest real-world measure is how often reviewers correct the AI. LeaseDesk keeps the AI's original draft next to every approved abstract so that correction rate can be measured.
-
-## Development
+## Quickstart
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/pytest            # 75 tests, offline; the Anthropic API is mocked
-.venv/bin/streamlit run app/main.py
+.venv/bin/python scripts/build_sandbox.py          # fictional properties, no API key needed
+LEASEDESK_DATA_DIR=sandbox/data .venv/bin/streamlit run app/main.py
 ```
 
-### Sandbox
+- **The sandbox:** two fictional shopping centers, laid out the way real property folders are, with
+  documents in every review state.
+- **Your own leases:** add an Anthropic API key on the Settings page, then point the Import page at
+  a folder with one subfolder per property.
+- **Without the command line:** on macOS, double-click `Start LeaseDesk.command`, or
+  `Start LeaseDesk Sandbox.command` for the sandbox.
 
-Double-click **`Start LeaseDesk Sandbox.command`** to open the app on a fresh, fictional workspace
-(`scripts/build_sandbox.py` builds it into `sandbox/`). Your real data is never touched, and the
-sandbox has no API key, so nothing it does costs money.
+## Benchmark
 
-The sandbox has two properties laid out the way real property folders are:
+**Method.** The benchmark has 22 synthetic leases, each with a known-correct abstract.
+`evaluation.compare` scores every field, including:
 
-- tenant subfolders with leases, amendments, and guaranties
-- an old tenant, insurance certificates, CAM and tax letters, a partnership agreement, photos, a Word letter, and a redacted copy
-- a scan with a meaningless name, and an excluded property
+- parties and premises
+- dates
+- deposit
+- recoveries
+- percentage rent
+- the rent in effect at each scheduled step
+- each option's notice deadline
 
-Its database has documents in every state (approved, waiting for review, waiting to be abstracted,
-failed). Every generated file records the decision the folder scanner should make, so the sandbox
-is also the scanner's answer key.
+Numbers are matched within 0.5%, which allows for rounding. Names ignore entity descriptions such as
+", a Colorado corporation". A failed extraction counts as every field missed.
 
-### Tests
+There are two sets:
 
-| File | What it covers |
-|---|---|
-| `test_library.py` | Folder rules, rescans, manual overrides, copies, excluded properties, removal |
-| `test_sandbox.py` | The scanner against the sandbox's answer key; grouping and amendments end to end |
-| `test_pages.py` | Renders every page headlessly against the sandbox and clicks through search, scanning, approving, and removing |
-| `test_extraction.py`, `test_wire_format.py` | The Claude call against a fake API server, and the schema sent to it |
-| `test_portfolio.py`, `test_db.py`, `test_evaluation.py`, `test_demo_data.py` | Tables, critical dates, exports, storage, scoring, demo data |
+| Set | Leases | Purpose |
+|---|---|---|
+| Standard | 12 | Clean demo leases with one layout: a regression check. Two are scans. |
+| Hard | 10 | Each lease is built around one known difficulty; the list follows this table. |
 
-## Roadmap
+The hard leases cover:
 
-- [x] **Phase 1: Lease library.** AI abstraction, review, search, critical dates
-- [ ] **Phase 2: Rent roll check.** Compare Yardi Breeze rent roll exports against abstracts and flag missed escalations and billing errors
-- [ ] **Phase 3: CAM reconciliation.** Apply each lease's pro-rata share, caps, gross-up, and exclusions to actual expenses; generate tenant statements
-- [ ] **Phase 4: Partner distributions.** Waterfall calculations (return of capital, preferred return, promote) from Breeze financials
+- a rent schedule described only in prose
+- dates written in words or set by formula
+- option notice windows given in months
+- a lease and its amendment in one file
+- struck-through, initialed corrections
+- a 16-page degraded scan with terms buried in later articles
+- a pro-rata share given only as a formula
+- a cumulative cap described indirectly
+- rent given only as annual totals, with a base year
+- distractor figures
+- a guarantor named only in an exhibit
 
-## Privacy
+Each answer key is computed by the same code that writes its lease text.
+`tests/test_benchmark_hard.py` checks the keys against their PDFs offline.
 
-Leases, the database, and your API key live in `data/`, which is excluded from git. Lease PDFs are sent to Anthropic's API only for abstraction; under Anthropic's commercial terms, API inputs are not used for model training. The demo property, tenants, and people are entirely fictional.
+**Results.** Live run on November 11, 2026, model `claude-opus-5-5`:
+
+| Set | Fields correct | Citation coverage | Cost |
+|---|---|---|---|
+| Standard (12) | 100% (338/338) | 74% (144/195) | $1.37 |
+| Hard (10) | 100% (249/249) | 72% (111/155) | $1.04 |
+
+*Citation coverage* is the share of filled-in, scored fields that have a page citation.
+
+Earlier runs scored lower: 96.0% on the standard set, then 96.8% and 97.6% on the hard set. None of
+those misses was a wrong rent, date, share or deadline. They fell into two groups:
+
+- **Different conventions.** For example, a lease with no CAM cap clause can be recorded as cap type
+  "none" or as "unknown". These conventions are now written into the schema and the prompt. Where
+  the model stayed inconsistent, the convention is applied in code after extraction.
+- **Errors in my answer keys.** One option deadline was off by a day across a leap year, and two
+  leases were marked triple-net without saying so.
+
+**Failure modes, honestly stated.** Both sets now score 100%, so the benchmark no longer separates
+better and worse versions. It catches regressions. It does not measure accuracy on real leases:
+
+- the leases are generated
+- the same person wrote the leases and the answer keys
+- no generator reproduces decades-old scans, handwriting in margins, or genuinely ambiguous drafting
+
+The real-world measure is the reviewer correction rate (see below). Not enough real abstracts have
+been approved yet to report one.
+
+```bash
+.venv/bin/python scripts/evaluate_extraction.py --set all          # live run, about $2.50
+.venv/bin/python scripts/evaluate_extraction.py --rescore benchmark_results/<run>   # free
+```
+
+**Benchmark before shipping.** A full live run writes `benchmark/receipt.json`, recording a
+fingerprint of everything that affects extraction:
+
+- the model
+- the prompts and request settings
+- the schema sent to the API
+- the conventions applied after extraction
+
+`tests/test_benchmark_receipt.py` recomputes the fingerprint offline. If any of those inputs changed
+without a new benchmark run, CI fails and prints the command to run. A manual GitHub Actions
+workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` secret is set.
+
+## Design decisions
+
+- **The AI's draft and the approved abstract are stored separately.** Every document keeps the AI's
+  output (`ai_abstract_json`) unchanged next to the version a person approved (`abstract_json`). That
+  makes review auditable.
+  - `corrections.py` compares the two field by field, exactly to the cent, which gives a correction
+    rate on real leases.
+  - The Dashboard and `scripts/correction_rate.py` report it.
+- **A compact wire format fits the API's limits.** Structured outputs compile the JSON schema into a
+  grammar. A lease abstract has dozens of optional fields, and the full Pydantic schema exceeded two
+  API limits: the number of optional (union-typed) fields and the size of the compiled grammar.
+  - `wire_format.py` sends every optional value as a string, where "" means not stated, and marks
+    every key required.
+  - The reply is converted back to numbers, dates, booleans and `None`, then validated against the
+    full `LeaseAbstract`.
+  - The rest of the code only ever sees the real model.
+- **Evidence for key values.** The prompt asks for a page number, a short verbatim quote and a
+  confidence level for each important value. The review screen jumps to the cited page. Coverage is
+  measured, not assumed: about three quarters of filled-in scored fields are cited in the latest run.
+- **Conventions are enforced in code where the model is inconsistent.** One example is defaulting
+  the rent commencement date to the commencement date when a lease states none. The rule lives in
+  `extraction.apply_conventions`, so it holds whatever the model returns.
+- **Local and single-user.** SQLite and a folder of PDFs, with no server. Lease contents leave the
+  machine only for the AI steps.
+
+## Testing
+
+```bash
+.venv/bin/pytest        # 115 tests, about 40 seconds
+```
+
+- **Offline:** the suite runs with no network access. The Anthropic API is replaced by an httpx
+  `MockTransport`, and a fixture in `tests/conftest.py` fails any test that tries to open a network
+  connection.
+- **Coverage:**
+  - the extraction call and its error handling
+  - the wire format
+  - folder scanning, checked against a generated sandbox whose files record the expected decision
+  - portfolio tables, critical dates, Excel and .ics export
+  - the correction rate
+  - the benchmark answer keys
+  - every Streamlit page, rendered headlessly with `streamlit.testing`, including clicks through
+    search, scanning, approving and removing
+- **CI:** GitHub Actions runs `ruff check` and `pytest` on every push.
+
+## Limitations
+
+- **Amendments aren't merged into one set of current terms.** A tenant's documents are grouped, and
+  the tenant list shows the newest stated suite, rent and expiration. The detailed terms still come
+  from the original lease.
+- **Current rent can be missing.** When the documents don't state it (for example, an extension
+  that keeps CPI-adjusted rent), it has to come from the accounting system.
+- **Not every value is cited.** Citation coverage is about 73%.
+- **Some files are out of reach.** PDFs only, up to 32 MB and 600 pages. Leases saved only as Word
+  files are skipped.
+- **Single user, single machine.** There's no multi-user access control.
+- **Planned, not built:** rent roll checks against Yardi exports, CAM reconciliation, and partner
+  distribution waterfalls.
+
+## How it was built
+
+I wrote a first prototype by hand in June 2026 and lost it to hardware damage. This version was
+built with Claude Code as a pair programmer. I directed the design, tested it against real leases,
+and reviewed the changes. The commit history covers this rebuild.
+
+Lease files, the database and API keys live in `data/`, which git ignores. Every tenant, person and
+property in this repository is fictional.

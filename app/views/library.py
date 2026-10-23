@@ -54,7 +54,8 @@ event = st.dataframe(
     width="stretch",
     on_select="rerun",
     selection_mode="single-row",
-    column_order=["Property", "Tenant", "Document", "Suite", "SF", "Monthly rent", "Rent $/SF/yr", "Expiration", "Months left",
+    column_order=["Property", "Tenant", "Document", "Suite", "SF", "Monthly rent", "Rent $/SF/yr", "Expiration",
+                  "Months left",
                   "Recovery", "Pro-rata %", "Next option deadline"],
     column_config={
         "SF": st.column_config.NumberColumn(format="%,d"),

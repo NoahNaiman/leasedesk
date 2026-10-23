@@ -122,7 +122,8 @@ if library_root and counts:
         if stats := st.session_state.pop("triage_stats", None):
             st.success(f"Checked {stats['lease_docs'] + stats['other']} files: {stats['lease_docs']} lease "
                        f"documents, {stats['other']} other. Cost: ${stats['cost']:.2f}."
-                       + (f" {stats['errors']} could not be read and are still marked unclear." if stats["errors"] else ""))
+                       + (f" {stats['errors']} could not be read and are still marked unclear."
+                          if stats["errors"] else ""))
         if result := st.session_state.pop("add_result", None):
             st.success(f"Added {result.added} lease documents."
                        + (f" {result.already_present} were already in LeaseDesk." if result.already_present else ""))
