@@ -7,6 +7,11 @@ from app import lease_summary, ui
 from leasedesk import db, portfolio
 
 today = date.today()
+
+
+def ordinal(n: int) -> str:
+    return {2: "second", 3: "third", 4: "fourth", 5: "fifth"}.get(n, f"#{n}")
+
 approved = ui.records(db.STATUS_APPROVED)
 
 st.title("Tenants")
@@ -50,27 +55,27 @@ if group is None:
 st.divider()
 h1, h2 = st.columns([5, 1])
 h1.subheader(group.name)
-h1.caption(f"{group.primary.abstract.tenant_name or ''} · {group.property}")
+h1.caption(f"{group.terms.tenant_name or ''} · {group.property}")
 if "tenant_key" in st.session_state and h2.button("Close", icon=":material/close:", width="stretch"):
     st.session_state.pop("tenant_key")
     st.rerun()
 
+merged = group.merged
 with st.container(border=True):
     st.markdown(f"**Documents on file ({len(group.records)})**")
-    ordered = sorted(group.records, key=lambda r: r.abstract.lease_date or date.min)
-    for r in ordered:
+    ordered = merged.applied + sorted(merged.superseded, key=lambda r: r.abstract.lease_date or date.min)
+    for step, r in enumerate(ordered, 1):
         a = r.abstract
+        superseded = r in merged.superseded
         d1, d2, d3 = st.columns([2, 5, 1], vertical_alignment="center")
         d1.markdown(f"{a.document_type.value.title()}  \n:gray[{ui.fmt_date(a.lease_date)}]")
-        d2.write(r.file_name)
+        d2.markdown(f"~~{r.file_name}~~  \n:gray[Superseded by a newer lease; not used]" if superseded
+                    else f"{r.file_name}  \n:gray[{'Base document' if step == 1 else f'Applied {ordinal(step)}'}]")
         if d3.button("Edit", key=f"doc-edit-{r.id}", icon=":material/edit:", width="stretch"):
             ui.open_in_review(r.id)
     if len(group.records) > 1:
-        st.caption(f"The tenant list shows the newest value stated in any of these documents, such as an "
-                   f"amendment's new expiration date. The full terms below come from the "
-                   f"{group.primary.abstract.document_type.value} dated "
-                   f"{ui.fmt_date(group.primary.abstract.lease_date)}; amendments are not yet merged into them, "
-                   "so check each amendment's abstract for what it changed.")
+        st.caption("The current terms below combine these documents in date order: each later document "
+                   "replaces only what it states. Values a later document changed are marked with their source.")
 
 with st.expander("Split or regroup these documents"):
     st.write("If one folder holds documents for more than one tenant (two billboards, for example), "
@@ -92,4 +97,5 @@ with st.expander("Split or regroup these documents"):
         st.toast("Documents regrouped.", icon=":material/check:")
         st.rerun()
 
-lease_summary.render(group.primary, today)
+st.markdown("#### Current terms")
+lease_summary.render_terms(group.terms, today, merged)

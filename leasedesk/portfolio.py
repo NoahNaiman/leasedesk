@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import io
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from functools import cached_property
 
 import pandas as pd
 
 from leasedesk.db import LeaseRecord
+from leasedesk.merge import MergedTerms, merge
 from leasedesk.models import LeaseAbstract, OptionType
 
 EVENT_EXPIRATION = "Lease expiration"
@@ -53,11 +54,13 @@ def lease_events(doc_id: int, a: LeaseAbstract) -> list[CriticalDate]:
 
 def critical_dates(records: list[LeaseRecord], today: date, days_ahead: int,
                    include_past_days: int = 0) -> list[CriticalDate]:
+    """Events from each tenant's merged current terms, so an amended expiration or a replaced
+    option doesn't also show up from the original lease."""
     out = []
-    for r in records:
-        if r.abstract is None:
-            continue
-        for e in lease_events(r.id, r.abstract):
+    for g in tenant_groups(records):
+        terms = g.terms
+        events = lease_events(g.primary.id, terms.model_copy(update={"trade_name": g.name}))
+        for e in events:
             delta = (e.when - today).days
             if -include_past_days <= delta <= days_ahead:
                 out.append(e)
@@ -179,30 +182,25 @@ class TenantGroup:
     property: str
     records: list[LeaseRecord]
 
+    @cached_property
+    def merged(self) -> MergedTerms:
+        """The lease and amendments combined into current terms (see leasedesk/merge.py)."""
+        return merge(self.records)
+
+    @property
+    def terms(self) -> LeaseAbstract:
+        return self.merged.abstract
+
     @property
     def primary(self) -> LeaseRecord:
-        """The document whose terms represent the tenant: the newest original lease, if any."""
-        def dated(r: LeaseRecord):
-            return r.abstract.lease_date or r.abstract.commencement_date or date.min
-        leases = [r for r in self.records if r.abstract.document_type.value == "lease"]
-        return max(leases or self.records, key=dated)
+        """The base document the current terms are built on (normally the newest lease)."""
+        return self.merged.applied[0]
 
     @property
     def name(self) -> str:
-        """A name chosen by hand, else the newest trade name in any document, else the main
-        document's legal name."""
+        """A name chosen by hand, else the current trade name, else the current legal name."""
         manual = next((r.tenant_override for r in self.records if r.tenant_override), None)
-        return manual or self.latest(lambda a: a.trade_name) or tenant_label(self.primary.abstract)
-
-    def latest(self, value: Callable[[LeaseAbstract], object]):
-        """The value from the newest document that states it.
-
-        Amendments usually restate only what they change (a new unit number, a new
-        expiration, a new rent table), so the newest stated value is the current one.
-        """
-        newest_first = sorted(self.records, reverse=True,
-                              key=lambda r: r.abstract.lease_date or r.abstract.commencement_date or date.min)
-        return next((v for r in newest_first if (v := value(r.abstract)) is not None), None)
+        return manual or tenant_label(self.terms)
 
 
 def tenant_groups(records: list[LeaseRecord]) -> list[TenantGroup]:
@@ -232,19 +230,19 @@ def tenant_table(groups: list[TenantGroup], today: date) -> pd.DataFrame:
     """One row per tenant per property, sorted by property and then tenant."""
     rows = []
     for g in groups:
-        expiration = g.latest(lambda a: a.expiration_date)
+        t = g.terms
         rows.append({
             "key": g.key,
             "Property": g.property,
             "Tenant": g.name,
-            "Legal name": g.primary.abstract.tenant_name,
-            "Suite": g.latest(lambda a: a.suite),
-            "SF": g.latest(lambda a: a.square_feet),
-            "Monthly rent": g.latest(lambda a: a.current_monthly_rent(today)),
-            "Expiration": expiration,
-            "Months left": _months_left(expiration, today),
-            "Status": tenant_status(expiration, today),
-            "Guarantor": g.latest(lambda a: a.guarantor),
+            "Legal name": t.tenant_name,
+            "Suite": t.suite,
+            "SF": t.square_feet,
+            "Monthly rent": t.current_monthly_rent(today),
+            "Expiration": t.expiration_date,
+            "Months left": _months_left(t.expiration_date, today),
+            "Status": tenant_status(t.expiration_date, today),
+            "Guarantor": t.guarantor,
             "Documents": len(g.records),
         })
     return pd.DataFrame(rows)
@@ -259,11 +257,11 @@ def property_table(groups: list[TenantGroup], today: date,
         by_property.setdefault(g.property, []).append(g)
     rows = []
     for prop, members in by_property.items():
-        sf = sum(g.latest(lambda a: a.square_feet) or 0 for g in members)
-        rent = sum(g.latest(lambda a: a.current_monthly_rent(today)) or 0 for g in members)
-        expirations = [g.latest(lambda a: a.expiration_date) for g in members]
-        upcoming = [d for d in expirations if d and d >= today]
-        address = next((a for g in members if (a := g.latest(lambda a: a.property_address))), None)
+        sf = sum(g.terms.square_feet or 0 for g in members)
+        rent = sum(g.terms.current_monthly_rent(today) or 0 for g in members)
+        upcoming = [g.terms.expiration_date for g in members
+                    if g.terms.expiration_date and g.terms.expiration_date >= today]
+        address = next((g.terms.property_address for g in members if g.terms.property_address), None)
         rows.append({
             "Property": prop,
             "Address": address,

@@ -32,16 +32,17 @@ if not all_records:
 approved = [r for r in all_records if r.status == db.STATUS_APPROVED]
 counts = {s: sum(1 for r in all_records if r.status == s) for s in
           (db.STATUS_PENDING, db.STATUS_REVIEW, db.STATUS_FAILED)}
-table = portfolio.lease_table(approved, today)
 
 st.title("Portfolio overview")
 if any(r.is_demo for r in all_records):
     st.caption("Showing demo data for a fictional shopping center. Remove it any time from Settings.")
 
+# Tenant-level figures use each tenant's merged current terms (lease plus amendments).
+tenants = portfolio.tenant_table(portfolio.tenant_groups(approved), today)
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Leases on file", len(approved))
-m2.metric("Leased square feet", f"{table['SF'].sum():,.0f}" if not table.empty else "0")
-m3.metric("Monthly base rent", ui.money_short(table["Monthly rent"].sum()) if not table.empty else "$0")
+m1.metric("Tenants", len(tenants), help=f"{len(approved)} approved documents")
+m2.metric("Leased square feet", ui.number(tenants["SF"].sum()) if not tenants.empty else "0")
+m3.metric("Monthly base rent", ui.money_short(tenants["Monthly rent"].sum()) if not tenants.empty else "$0")
 m4.metric("Awaiting review", counts[db.STATUS_REVIEW])
 
 if counts[db.STATUS_REVIEW]:
