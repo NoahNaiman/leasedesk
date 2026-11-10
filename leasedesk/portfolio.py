@@ -107,6 +107,19 @@ def _tenant_key(a: LeaseAbstract) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower()) or f"unknown-{id(a)}"
 
 
+def record_property(r: LeaseRecord) -> str:
+    """The property a document belongs to: its property folder's name, else what the lease says."""
+    return r.property_name or property_label(r.abstract)
+
+
+def _record_tenant_key(r: LeaseRecord) -> str:
+    """A tenant's subfolder groups its documents even when names vary between them
+    (e.g. an assignment to a new legal entity). Otherwise group by legal name."""
+    if r.tenant_folder:
+        return "folder:" + re.sub(r"[^a-z0-9]", "", r.tenant_folder.lower())
+    return _tenant_key(r.abstract)
+
+
 def _property_sort(label: str) -> tuple:
     return (label == NO_PROPERTY, label.lower())
 
@@ -131,7 +144,7 @@ def lease_table(records: list[LeaseRecord], today: date) -> pd.DataFrame:
             "id": r.id,
             "Tenant": tenant_label(a),
             "Legal name": a.tenant_name,
-            "Property": property_label(a),
+            "Property": record_property(r),
             "Document": a.document_type.value.title(),
             "Suite": a.suite,
             "SF": a.square_feet,
@@ -149,7 +162,7 @@ def lease_table(records: list[LeaseRecord], today: date) -> pd.DataFrame:
             "Next option deadline": next_option,
             "Guarantor": a.guarantor,
             "Source file": r.file_name,
-            "_sort": (_property_sort(property_label(a)), tenant_label(a).lower(),
+            "_sort": (_property_sort(record_property(r)), tenant_label(a).lower(),
                       a.lease_date or a.commencement_date or date.min),
         })
     rows.sort(key=lambda row: row["_sort"])
@@ -191,7 +204,7 @@ def tenant_groups(records: list[LeaseRecord]) -> list[TenantGroup]:
     for r in records:
         if r.abstract is None:
             continue
-        prop, key = property_label(r.abstract), _tenant_key(r.abstract)
+        prop, key = record_property(r), _record_tenant_key(r)
         groups.setdefault((prop, key), TenantGroup(f"{prop}|{key}", prop, [])).records.append(r)
     return sorted(groups.values(), key=lambda g: (_property_sort(g.property), g.name.lower()))
 
@@ -217,9 +230,11 @@ def tenant_table(groups: list[TenantGroup], today: date) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def property_table(groups: list[TenantGroup], today: date) -> pd.DataFrame:
-    """One row per property, summarizing its tenants."""
-    by_property: dict[str, list[TenantGroup]] = {}
+def property_table(groups: list[TenantGroup], today: date,
+                   all_properties: list[str] = ()) -> pd.DataFrame:
+    """One row per property, summarizing its tenants. ``all_properties`` adds properties
+    that have no approved leases yet (e.g. property folders still being reviewed)."""
+    by_property: dict[str, list[TenantGroup]] = {name: [] for name in all_properties}
     for g in groups:
         by_property.setdefault(g.property, []).append(g)
     rows = []
@@ -247,19 +262,27 @@ def property_table(groups: list[TenantGroup], today: date) -> pd.DataFrame:
 
 
 def rename_property(conn, records: list[LeaseRecord], old_label: str, new_name: str) -> int:
-    """Set the property name on every approved document grouped under ``old_label``.
+    """Rename a property, or merge it into another by giving it that property's name.
 
-    Used to merge properties that were recorded under different names (for example a
-    center name on the original lease and a street address on its amendments).
+    Documents from a property folder are renamed through the folder's display name (the
+    folder itself is not touched). Uploaded documents get the name set on their abstract.
+    Returns the number of documents moved.
     """
     from leasedesk import db
 
     count = 0
+    renamed_folders = set()
     for r in records:
-        if r.abstract is not None and property_label(r.abstract) == old_label:
+        if r.abstract is None or record_property(r) != old_label:
+            continue
+        if r.property_id is not None:
+            if r.property_id not in renamed_folders:
+                db.rename_property(conn, r.property_id, new_name)
+                renamed_folders.add(r.property_id)
+        else:
             db.save_review(conn, r.id, r.abstract.model_copy(update={"property_name": new_name.strip()}),
                            approve=True)
-            count += 1
+        count += 1
     return count
 
 

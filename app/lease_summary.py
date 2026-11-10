@@ -14,7 +14,7 @@ def render(record: LeaseRecord, today: date) -> None:
     a = record.abstract
     h1, h2, h3 = st.columns([4, 1, 1])
     h1.subheader(a.display_name())
-    h1.caption(f"{a.tenant_name or ''} · {portfolio.property_label(a)} · {record.file_name}")
+    h1.caption(f"{a.tenant_name or ''} · {portfolio.record_property(record)} · {record.file_name}")
     if h2.button("Edit", icon=":material/edit:", width="stretch", key=f"edit-{record.id}"):
         ui.open_in_review(record.id)
     with open(record.stored_path, "rb") as fh:
