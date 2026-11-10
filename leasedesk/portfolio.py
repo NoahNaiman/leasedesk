@@ -133,3 +133,30 @@ def to_excel(sheets: dict[str, pd.DataFrame]) -> bytes:
                 ws.column_dimensions[ws.cell(1, i).column_letter].width = min(60, width + 2)
             ws.freeze_panes = "A2"
     return buf.getvalue()
+
+
+def to_ics(events: list[CriticalDate], calendar_name: str = "LeaseDesk critical dates") -> bytes:
+    """All-day calendar events that open in Apple Calendar, Outlook, or Google Calendar."""
+    from datetime import datetime, timedelta
+
+    def esc(text: str) -> str:
+        return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//LeaseDesk//EN", f"X-WR-CALNAME:{esc(calendar_name)}"]
+    for i, e in enumerate(events):
+        title = f"{e.event}: {e.tenant}" + (f" ({e.suite})" if e.suite else "")
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:leasedesk-{e.doc_id}-{e.when:%Y%m%d}-{i}",
+            f"DTSTAMP:{stamp}",
+            f"DTSTART;VALUE=DATE:{e.when:%Y%m%d}",
+            f"DTEND;VALUE=DATE:{e.when + timedelta(days=1):%Y%m%d}",
+            f"SUMMARY:{esc(title)}",
+            f"DESCRIPTION:{esc(e.detail)}",
+        ]
+        if e.event == EVENT_OPTION:  # remind two weeks ahead of notice deadlines
+            lines += ["BEGIN:VALARM", "TRIGGER:-P14D", "ACTION:DISPLAY", f"DESCRIPTION:{esc(title)}", "END:VALARM"]
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    return ("\r\n".join(lines) + "\r\n").encode()

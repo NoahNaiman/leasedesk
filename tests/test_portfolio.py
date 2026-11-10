@@ -44,3 +44,15 @@ def test_excel_export_round_trips(conn):
     back = pd.read_excel(io.BytesIO(data), sheet_name="Leases")
     assert list(back.columns) == list(df.columns)
     assert len(back) == len(df)
+
+
+def test_calendar_export_is_valid_ics(conn):
+    events = portfolio.critical_dates(approved(conn), TODAY, days_ahead=365)
+    ics = portfolio.to_ics(events).decode()
+    assert ics.startswith("BEGIN:VCALENDAR") and ics.rstrip().endswith("END:VCALENDAR")
+    assert ics.count("BEGIN:VEVENT") == len(events)
+    # Option deadlines carry a two-week reminder.
+    options = sum(1 for e in events if e.event == portfolio.EVENT_OPTION)
+    assert ics.count("TRIGGER:-P14D") == options
+    # Commas and semicolons in descriptions are escaped per RFC 5545.
+    assert "\\," in ics
