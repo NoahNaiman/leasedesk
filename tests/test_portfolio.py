@@ -56,3 +56,78 @@ def test_calendar_export_is_valid_ics(conn):
     assert ics.count("TRIGGER:-P14D") == options
     # Commas and semicolons in descriptions are escaped per RFC 5545.
     assert "\\," in ics
+
+
+def _abstract(**fields):
+    from leasedesk.models import LeaseAbstract
+    return LeaseAbstract(**fields)
+
+
+def test_property_label_falls_back_to_street_address():
+    assert portfolio.property_label(_abstract(property_name="Maple Ridge Plaza")) == "Maple Ridge Plaza"
+    assert portfolio.property_label(
+        _abstract(property_address="410 Juniper Street, Unit F, Fairview, Ohio")) == "410 Juniper Street"
+    assert portfolio.property_label(
+        _abstract(property_address="12 Main St Suite 4, Boulder, CO")) == "12 Main St"
+    assert portfolio.property_label(_abstract()) == portfolio.NO_PROPERTY
+
+
+def test_tables_sorted_by_property_then_tenant(conn):
+    records = approved(conn)
+    leases = portfolio.lease_table(records, TODAY)
+    keys = [(p.lower(), t.lower()) for p, t in zip(leases["Property"], leases["Tenant"])]
+    assert keys == sorted(keys)
+    assert leases["Property"].iloc[0] == "Maple Ridge Plaza"
+
+    groups = portfolio.tenant_groups(records)
+    tenants = portfolio.tenant_table(groups, TODAY)
+    assert list(tenants["Tenant"]) == [g.name for g in groups]
+    assert len(tenants) == 10
+
+    props = portfolio.property_table(groups, TODAY)
+    assert list(props["Property"]) == ["Maple Ridge Plaza", "Willow Creek Commons"]
+    assert props["Tenants"].sum() == 10
+    assert (props["Avg rent $/SF/yr"] > 0).all()
+
+
+def test_amendments_group_under_their_tenant(conn):
+    from leasedesk.models import DocumentType
+
+    lease = _abstract(tenant_name="Alpine Frozen Treats, LLC, a Colorado limited liability company",
+                      trade_name="Snowcap Creamery", property_address="410 Juniper Street, Unit 5, Fairview",
+                      suite="Unit 5", square_feet=1281, lease_date=date(2010, 2, 28),
+                      expiration_date=date(2015, 10, 31))
+    amendment = _abstract(document_type=DocumentType.AMENDMENT, tenant_name="Alpine Frozen Treats, LLC",
+                          property_address="410 Juniper Street, Unit F, Fairview", suite="Unit F",
+                          lease_date=date(2025, 6, 30), expiration_date=date(2030, 9, 30))
+    for name, a in (("lease.pdf", lease), ("amendment.pdf", amendment)):
+        doc_id = db.add_document(conn, file_name=name, file_sha256=name, stored_path=name,
+                                 page_count=1, is_scanned=False)
+        db.save_review(conn, doc_id, a, approve=True)
+
+    groups = portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))
+    assert len(groups) == 1
+    assert len(groups[0].records) == 2
+    assert groups[0].primary.abstract.document_type == DocumentType.LEASE
+    assert groups[0].name == "Snowcap Creamery"
+    # The tenant row shows the newest stated values: the amendment's unit, the lease's square feet.
+    row = portfolio.tenant_table(groups, TODAY).iloc[0]
+    assert row["Suite"] == "Unit F"
+    assert row["SF"] == 1281
+    assert row["Expiration"] == date(2030, 9, 30)
+
+
+def test_rename_property_merges_groups(conn):
+    records = approved(conn)
+    moved = portfolio.rename_property(conn, records, "Maple Ridge Plaza", "Willow Creek Commons")
+    assert moved == 3
+    groups = portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))
+    assert {g.property for g in groups} == {"Willow Creek Commons"}
+
+
+def test_tenant_label_drops_entity_description():
+    assert portfolio.tenant_label(_abstract(tenant_name="HARBOR NAIL STUDIO INC., a Colorado corporation")) \
+        == "HARBOR NAIL STUDIO INC."
+    assert portfolio.tenant_label(_abstract(tenant_name="Acme, LLC, an Ohio limited liability company")) \
+        == "Acme, LLC"
+    assert portfolio.tenant_label(_abstract(tenant_name="X Corp", trade_name="X Store")) == "X Store"

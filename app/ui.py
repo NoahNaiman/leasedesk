@@ -4,20 +4,30 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from leasedesk import db
 
 
+def missing(x) -> bool:
+    """True for None and for pandas' NaN/NaT blanks."""
+    return x is None or bool(pd.isna(x))
+
+
+def number(x: float | None) -> str:
+    return "—" if missing(x) else f"{x:,.0f}"
+
+
 def money(x: float | None, cents: bool = False) -> str:
-    if x is None:
+    if missing(x):
         return "—"
     return f"${x:,.2f}" if cents else f"${x:,.0f}"
 
 
 def money_short(x: float | None) -> str:
     """Compact dollars for headline numbers: $142.3K, $1.25M."""
-    if x is None:
+    if missing(x):
         return "—"
     if abs(x) >= 1_000_000:
         return f"${x / 1_000_000:,.2f}M"
@@ -27,11 +37,11 @@ def money_short(x: float | None) -> str:
 
 
 def pct(x: float | None) -> str:
-    return "—" if x is None else f"{x:g}%"
+    return "—" if missing(x) else f"{x:g}%"
 
 
 def fmt_date(d: date | None) -> str:
-    return d.strftime("%b %d, %Y") if d else "—"
+    return "—" if missing(d) else d.strftime("%b %d, %Y")
 
 
 def records(status: str | None = None) -> list[db.LeaseRecord]:
