@@ -1,0 +1,97 @@
+# LeaseDesk
+
+**AI-assisted lease administration for retail shopping centers.** LeaseDesk reads lease PDFs (digital or scanned), extracts the terms a property manager actually needs, and keeps them in a searchable library with a calendar of every expiration, option deadline, and rent increase.
+
+AI drafts each abstract, and a person approves it. Every extracted value links back to the page and quote it came from, so checking a lease takes minutes instead of an hour.
+
+> **Why I built this**
+>
+> _TODO (Noah): two or three sentences on the manual work this replaces, in your own words._
+
+---
+
+## What it does
+
+| | |
+|---|---|
+| **Import** | Drag in PDFs or point at a whole folder. Duplicates are detected automatically, and scanned leases are flagged. |
+| **AI abstraction** | Claude reads each lease and fills a structured abstract: parties, premises, term dates, rent schedule, CAM/tax/insurance recoveries (pro-rata share, caps, base year, gross-up, exclusions), percentage rent, options, exclusives, co-tenancy, and radius restrictions. |
+| **Review** | The lease page and the editable abstract sit side by side. Each value cites its page; one click jumps there. Low-confidence values are called out. |
+| **Lease library** | Search across all approved leases and open a one-page summary. Export everything (leases, rent schedules, options) to Excel. |
+| **Critical dates** | Expirations, option notice deadlines, and rent increases for any window, with urgent deadlines highlighted. Export to Excel or to your calendar, with a reminder two weeks before each option deadline. |
+| **Demo mode** | A fictional 86,000 SF center, Willow Creek Commons, with 12 tenants, so you can explore without real data or an API key. |
+
+## Getting started (no technical experience needed)
+
+1. Install Python 3 from [python.org](https://www.python.org/downloads/) if you don't have it.
+2. Double-click **`Start LeaseDesk.command`**. The first launch installs everything it needs (about a minute). After that, it opens in your browser right away.
+   - If macOS says the file can't be opened because it's from an unidentified developer, right-click it, choose **Open**, then **Open** again.
+3. Click **Load demo property** to explore, or go to **Settings** and add an [Anthropic API key](https://console.anthropic.com) to abstract your own leases.
+
+Close the Terminal window to stop LeaseDesk. All data stays in the `data/` folder on your computer.
+
+## How it works
+
+```
+ PDF (digital or scanned)
+        │  hash → dedupe, detect scan
+        ▼
+ data/documents/<sha256>.pdf ──► Claude (PDF document input + structured output)
+                                        │  validated LeaseAbstract (Pydantic)
+                                        ▼
+                        SQLite: ai_abstract_json (kept as-is)
+                                abstract_json   (human-reviewed)
+                                        │  approve
+                                        ▼
+                Library · Critical dates · Excel / .ics exports
+```
+
+```
+leasedesk/            core logic, no UI code
+  models.py           LeaseAbstract schema: the single source of truth
+  extraction.py       Claude call, error handling, parallel batch processing
+  documents.py        PDF import, dedupe, scanned-page detection
+  db.py               SQLite storage
+  portfolio.py        lease table, critical dates, Excel and calendar export
+  evaluation.py       field-by-field accuracy scoring
+  demo_data.py        generates the demo leases and their correct abstracts
+app/                  Streamlit UI (one file per page)
+scripts/              evaluate_extraction.py
+tests/                pytest suite (runs offline against a mocked API)
+```
+
+### Design decisions
+
+- **The schema drives everything.** One Pydantic model defines what Claude must return (via structured outputs), what gets stored, and what the review form edits. Adding a field means changing one class.
+- **AI drafts, people approve.** Nothing reaches the library until a person approves it. The AI's original draft is stored separately from the reviewed version, so correction rates can be measured over time.
+- **Evidence for every value.** The model must cite a page number, a verbatim quote, and a confidence level for each important term. That turns review into verification instead of re-reading.
+- **No separate OCR step.** Claude reads PDFs as both text and page images, so scanned leases go through the same path as digital ones.
+- **Demo data with an answer key.** The demo generator produces each lease PDF *and* its correct abstract. That powers the demo, and it gives a repeatable benchmark for extraction accuracy (`scripts/evaluate_extraction.py`) so prompt or model changes can be measured, not guessed at.
+- **Local-first.** One user, one machine: SQLite and a folder of PDFs, no server to maintain. Lease text leaves the computer only when you click **Abstract**.
+
+## Measuring accuracy
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... .venv/bin/python scripts/evaluate_extraction.py
+```
+
+This abstracts all 12 demo leases (two of them scans) and reports per-field accuracy, the most-missed fields, and the total API cost.
+
+## Development
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/pytest            # offline; the Anthropic API is mocked
+.venv/bin/streamlit run app/main.py
+```
+
+## Roadmap
+
+- [x] **Phase 1: Lease library.** AI abstraction, review, search, critical dates
+- [ ] **Phase 2: Rent roll check.** Compare Yardi Breeze rent roll exports against abstracts and flag missed escalations and billing errors
+- [ ] **Phase 3: CAM reconciliation.** Apply each lease's pro-rata share, caps, gross-up, and exclusions to actual expenses; generate tenant statements
+- [ ] **Phase 4: Partner distributions.** Waterfall calculations (return of capital, preferred return, promote) from Breeze financials
+
+## Privacy
+
+Leases, the database, and your API key live in `data/`, which is excluded from git. Lease PDFs are sent to Anthropic's API only for abstraction; under Anthropic's commercial terms, API inputs are not used for model training. The demo property, tenants, and people are entirely fictional.
