@@ -31,7 +31,7 @@ st.subheader("Demo property")
 with db.connect() as conn:
     has_demo = any(r.is_demo for r in db.list_documents(conn))
 if has_demo:
-    st.write("Demo data for **Willow Creek Commons** is loaded. Remove it before working with real leases, "
+    st.write("Demo data for **Willow Creek Commons** and **Maple Ridge Plaza** is loaded. Remove it before working with real leases, "
              "or keep it alongside them. Demo leases are tagged, so removing them never touches your own.")
     if st.button("Remove demo data", icon=":material/delete:"):
         with db.connect() as conn:
