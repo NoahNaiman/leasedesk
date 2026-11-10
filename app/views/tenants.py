@@ -28,7 +28,7 @@ if chosen_props:
 
 event = st.dataframe(
     view, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-    column_order=["Property", "Tenant", "Suite", "SF", "Monthly rent", "Expiration", "Months left",
+    column_order=["Property", "Tenant", "Suite", "SF", "Monthly rent", "Expiration", "Months left", "Status",
                   "Guarantor", "Documents"],
     column_config={"SF": st.column_config.NumberColumn(format="%,d"),
                    "Monthly rent": st.column_config.NumberColumn(format="dollar"),

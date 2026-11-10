@@ -114,6 +114,41 @@ def classify_path(rel_path: str) -> Classification:
     return Classification(DECISION_UNCLEAR, "Name doesn't say what it is", tenant_folder)
 
 
+# --------------------------------------------------------------------------- copies
+
+# Words that mark another copy of the same document rather than a different document.
+_COPY_WORDS = re.compile(r"\b(redacted|copy|signed|executed|fully|final|\w*laptop)\b|\(\d+\)", re.IGNORECASE)
+
+
+def _copy_key(rel_path: str) -> str:
+    p = PurePosixPath(rel_path)
+    stem = _COPY_WORDS.sub(" ", _words(p.stem))
+    return f"{p.parent}/" + re.sub(r"[^a-z0-9]", "", stem.lower())
+
+
+def _copy_preference(rel_path: str) -> tuple:
+    """Lower sorts first: signed or executed copies, then unredacted, then plain names."""
+    name = PurePosixPath(rel_path).stem.lower()
+    return ("signed" not in name and "executed" not in name, "redacted" in name, "copy" in name
+            or "laptop" in name, len(name))
+
+
+def _mark_copies(conn, property_id: int) -> None:
+    """When a folder has several copies of one document, keep the best one and skip the rest."""
+    rows = conn.execute("""SELECT id, rel_path FROM file_index WHERE property_id = ? AND decision = 'lease_doc'
+                           AND decided_by = 'rules' AND document_id IS NULL""", (property_id,)).fetchall()
+    groups: dict[str, list] = {}
+    for r in rows:
+        groups.setdefault(_copy_key(r["rel_path"]), []).append(r)
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        keep, *copies = sorted(members, key=lambda r: _copy_preference(r["rel_path"]))
+        for r in copies:
+            conn.execute("UPDATE file_index SET decision = 'skipped', reason = ? WHERE id = ?",
+                         (f"Another copy of \u201c{PurePosixPath(keep['rel_path']).name}\u201d", r["id"]))
+
+
 # --------------------------------------------------------------------------- scan
 
 @dataclass
@@ -163,6 +198,7 @@ def scan(conn, root: Path, on_progress: Callable[[int, int, str], None] | None =
                      doc_kind = NULL, tenant_hint = NULL, updated_at = excluded.updated_at""",
                 (property_id, rel, stat.st_size, stat.st_mtime, c.tenant_folder, c.decision, c.reason, _now()),
             )
+        _mark_copies(conn, property_id)
         # Forget files that were deleted or moved out of this property folder.
         for row in conn.execute("SELECT rel_path FROM file_index WHERE property_id = ? AND document_id IS NULL",
                                 (property_id,)).fetchall():
@@ -226,10 +262,14 @@ class DocKind(str, Enum):
     ASSIGNMENT = "assignment"
     GUARANTY = "guaranty"
     SUBLEASE = "sublease"
+    TERMINATION = "termination"
+    PARTIAL_PAGES = "partial_pages"
     OTHER = "other_not_a_lease_document"
 
 
-LEASE_KINDS = {k for k in DocKind if k != DocKind.OTHER}
+# Kinds that are abstracted. A termination ends a lease, and loose pages of a lease are
+# usually duplicates of a complete copy, so neither becomes its own lease record.
+LEASE_KINDS = {k for k in DocKind if k not in (DocKind.OTHER, DocKind.TERMINATION, DocKind.PARTIAL_PAGES)}
 
 
 class TriageResult(BaseModel):
@@ -241,6 +281,8 @@ class TriageResult(BaseModel):
 TRIAGE_PROMPT = """These are the first pages of a file from a commercial property manager's records.
 Classify the document. Lease documents are: the lease itself, an amendment, an extension or renewal,
 a tenant's exercise of an option, an assignment of the lease, a guaranty of the lease, or a sublease.
+Use "termination" for an agreement that ends a lease, and "partial_pages" when the file is only a page
+or a few loose pages taken from the middle or end of a lease rather than a complete document.
 Everything else (insurance certificates, tax bills, CAM statements, invoices, general letters, surveys,
 estoppels, partnership papers, ...) is "other_not_a_lease_document"."""
 
