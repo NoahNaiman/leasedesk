@@ -4,9 +4,7 @@
 
 AI drafts each abstract, and a person approves it. Every extracted value links back to the page and quote it came from, so checking a lease takes minutes instead of an hour.
 
-> **Why I built this**
->
-> _TODO (Noah): two or three sentences on the manual work this replaces, in your own words._
+LeaseDesk was built to help The Robert L Naiman Co LLC with day-to-day property management: checking lease abstracts, tracking critical dates, and calculating partner distributions.
 
 ---
 
