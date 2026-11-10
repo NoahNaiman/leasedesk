@@ -7,7 +7,7 @@ import anthropic
 import httpx2 as httpx
 import pytest
 
-from leasedesk import db, demo_data, documents, extraction
+from leasedesk import db, demo_data, documents, extraction, wire_format
 from leasedesk.models import LeaseAbstract
 
 
@@ -19,7 +19,7 @@ def fake_client(handler) -> anthropic.Anthropic:
 def message_response(abstract: LeaseAbstract, stop_reason="end_turn") -> httpx.Response:
     return httpx.Response(200, json={
         "id": "msg_test", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
-        "content": [{"type": "text", "text": abstract.model_dump_json()}],
+        "content": [{"type": "text", "text": json.dumps(wire_format.to_wire_json(abstract))}],
         "stop_reason": stop_reason, "stop_sequence": None,
         "usage": {"input_tokens": 12000, "output_tokens": 1500},
     })

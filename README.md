@@ -48,6 +48,7 @@ Close the Terminal window to stop LeaseDesk. All data stays in the `data/` folde
 leasedesk/            core logic, no UI code
   models.py           LeaseAbstract schema: the single source of truth
   extraction.py       Claude call, error handling, parallel batch processing
+  wire_format.py      compact schema sent to the API, and conversion back
   documents.py        PDF import, dedupe, scanned-page detection
   db.py               SQLite storage
   portfolio.py        lease table, critical dates, Excel and calendar export
@@ -61,6 +62,7 @@ tests/                pytest suite (runs offline against a mocked API)
 ### Design decisions
 
 - **The schema drives everything.** One Pydantic model defines what Claude must return (via structured outputs), what gets stored, and what the review form edits. Adding a field means changing one class.
+- **A wire format for the API.** Structured outputs compile the schema into a grammar with a size cap, and a lease abstract's dozens of optional fields exceed it. `wire_format.py` sends every optional value as a string ("" means not stated) and converts the reply back before validation, so the rest of the app only ever sees the real model.
 - **AI drafts, people approve.** Nothing reaches the library until a person approves it. The AI's original draft is stored separately from the reviewed version, so correction rates can be measured over time.
 - **Evidence for every value.** The model must cite a page number, a verbatim quote, and a confidence level for each important term. That turns review into verification instead of re-reading.
 - **No separate OCR step.** Claude reads PDFs as both text and page images, so scanned leases go through the same path as digital ones.

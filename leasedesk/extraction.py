@@ -10,14 +10,16 @@ than free text that needs parsing.
 from __future__ import annotations
 
 import base64
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import anthropic
+import pydantic
 
-from leasedesk import config, db
+from leasedesk import config, db, wire_format
 from leasedesk.models import LeaseAbstract
 
 SYSTEM_PROMPT = """You are an experienced commercial real estate lease administrator \
@@ -73,12 +75,12 @@ def abstract_pdf(client: anthropic.Anthropic, pdf_path: Path) -> ExtractionResul
     """Send one PDF to Claude and return a validated abstract."""
     pdf_b64 = base64.standard_b64encode(Path(pdf_path).read_bytes()).decode("ascii")
     try:
-        response = client.beta.messages.parse(
+        response = client.beta.messages.create(
             model=config.EXTRACTION_MODEL,
             max_tokens=16000,
             system=SYSTEM_PROMPT,
-            output_config={"effort": "high"},
-            output_format=LeaseAbstract,
+            output_config={"effort": "high",
+                           "format": {"type": "json_schema", "schema": wire_format.WIRE_SCHEMA}},
             # If a request is ever declined by a safety classifier, retry it on a fallback model.
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
@@ -108,11 +110,14 @@ def abstract_pdf(client: anthropic.Anthropic, pdf_path: Path) -> ExtractionResul
         raise ExtractionError("The AI declined to process this document.")
     if response.stop_reason == "max_tokens":
         raise ExtractionError("The lease was too long to abstract in one pass.")
-    if response.parsed_output is None:
-        raise ExtractionError("The AI response could not be read as a lease abstract.")
+    text = "".join(b.text for b in response.content if b.type == "text")
+    try:
+        abstract = wire_format.from_wire(json.loads(text))
+    except (ValueError, pydantic.ValidationError) as exc:
+        raise ExtractionError("The AI response could not be read as a lease abstract.") from exc
 
     return ExtractionResult(
-        abstract=response.parsed_output,
+        abstract=abstract,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
     )
