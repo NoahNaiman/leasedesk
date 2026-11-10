@@ -1,0 +1,9 @@
+[project]
+name = "leasedesk"
+version = "0.1.0"
+description = "Lease abstraction and portfolio tools for retail property management"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
