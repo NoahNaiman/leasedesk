@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from leasedesk import benchmark_hard, demo_data, evaluation, extraction, settings  # noqa: E402
+from leasedesk import benchmark_hard, benchmark_receipt, demo_data, evaluation, extraction, settings  # noqa: E402
 
 
 def cases_for(name: str) -> list[tuple[str, bytes, object]]:
@@ -46,10 +46,10 @@ def rescore_set(name: str, saved: Path) -> dict:
         if not path.exists():
             missed = [evaluation.FieldResult(f.field, f.expected, None, False)
                       for f in evaluation.compare(expected, expected)]
-            outcomes.append((file_name, missed, "no saved answer", 0.0))
+            outcomes.append((file_name, missed, "no saved answer", 0.0, None))
             continue
         actual = extraction.apply_conventions(LeaseAbstract.model_validate_json(path.read_text()))
-        outcomes.append((file_name, evaluation.compare(expected, actual), None, 0.0))
+        outcomes.append((file_name, evaluation.compare(expected, actual), None, 0.0, actual))
     return report(name, outcomes, rescored=True)
 
 
@@ -68,11 +68,11 @@ def run_set(name: str, client, save_to: Path | None = None) -> dict:
                 # A failed extraction misses every field; leaving it out would flatter the score.
                 missed = [evaluation.FieldResult(f.field, f.expected, None, False)
                           for f in evaluation.compare(expected, expected)]
-                return file_name, missed, str(exc), 0.0
+                return file_name, missed, str(exc), 0.0, None
             if save_to:
                 save_to.mkdir(parents=True, exist_ok=True)
                 (save_to / f"{Path(file_name).stem}.json").write_text(result.abstract.model_dump_json(indent=2))
-            return file_name, evaluation.compare(expected, result.abstract), None, result.cost_usd
+            return file_name, evaluation.compare(expected, result.abstract), None, result.cost_usd, result.abstract
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             outcomes = list(pool.map(one, cases))
@@ -84,8 +84,12 @@ def report(name: str, outcomes: list, rescored: bool = False) -> dict:
     misses: Counter[str] = Counter()
     correct = total = 0
     per_lease, cost = [], 0.0
-    for file_name, fields, error, case_cost in outcomes:
+    cited = fillable = 0
+    for file_name, fields, error, case_cost, actual in outcomes:
         cost += case_cost
+        if actual is not None:
+            c, f = evaluation.citation_coverage(actual)
+            cited, fillable = cited + c, fillable + f
         if error:
             print(f"  FAILED  {file_name}: {error} (all {len(fields)} fields counted as missed)")
         score = evaluation.accuracy(fields)
@@ -104,7 +108,10 @@ def report(name: str, outcomes: list, rescored: bool = False) -> dict:
           f"mean per lease {sum(per_lease) / max(1, len(per_lease)):.1%}; cost ${cost:.2f}")
     if misses:
         print("Most-missed: " + ", ".join(f"{k} ({v})" for k, v in misses.most_common(6)))
-    return {"set": name, "accuracy": field_acc, "correct": correct, "total": total, "cost": cost}
+    coverage = cited / fillable if fillable else 0.0
+    print(f"Citation coverage: {coverage:.0%} of filled-in scored fields have a page citation ({cited}/{fillable})")
+    return {"set": name, "accuracy": field_acc, "correct": correct, "total": total, "cost": cost,
+            "citation_coverage": coverage}
 
 
 def main() -> int:
@@ -129,6 +136,11 @@ def main() -> int:
     run_dir = RESULTS_DIR / datetime.now().strftime("%Y-%m-%d_%H%M%S")
     results = [run_set(name, client, run_dir / name) for name in sets]
     print(f"\nAI answers saved in {run_dir}")
+    if args.set == "all":
+        # A full live run is the proof CI checks for (see leasedesk/benchmark_receipt.py).
+        receipt = benchmark_receipt.write_receipt(results)
+        print(f"Receipt written to {benchmark_receipt.RECEIPT_PATH} (fingerprint {receipt['fingerprint']}). "
+              "Commit it with your change.")
     if len(results) > 1:
         c, t = sum(r["correct"] for r in results), sum(r["total"] for r in results)
         print(f"\nOverall: {c / t:.1%} ({c}/{t} fields); total cost ${sum(r['cost'] for r in results):.2f}")
