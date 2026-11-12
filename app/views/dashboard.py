@@ -3,7 +3,7 @@ from datetime import date
 import streamlit as st
 
 from app import ui
-from leasedesk import db, demo_data, portfolio
+from leasedesk import corrections, db, demo_data, portfolio
 
 today = date.today()
 all_records = ui.records()
@@ -17,7 +17,8 @@ if not all_records:
     left, right = st.columns(2)
     with left, st.container(border=True):
         st.subheader(":material/storefront: Try the demo")
-        st.write("Load two fictional shopping centers, **Willow Creek Commons** and **Maple Ridge Plaza**, with 12 tenants between them.")
+        st.write("Load two fictional shopping centers, **Willow Creek Commons** and **Maple Ridge Plaza**, "
+                 "with 12 tenants between them.")
         if st.button("Load demo property", type="primary"):
             with db.connect() as conn, st.spinner("Building demo leases…"):
                 demo_data.load_demo_into_db(conn)
@@ -68,3 +69,15 @@ if events:
 else:
     st.write("Nothing due in the next 90 days.")
 st.page_link("views/critical_dates.py", label="See all critical dates", icon=":material/event:")
+
+# How often reviewers changed what the AI drafted, on documents approved so far.
+report = corrections.correction_report(approved)
+if report.documents:
+    st.subheader("How often the AI needed correcting")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Approved documents compared", report.documents)
+    c2.metric("Fields corrected", f"{report.rate:.1%}", help=f"{report.fields_corrected} of {report.fields} fields")
+    c3.metric("Documents with any correction", f"{report.document_rate:.0%}")
+    if report.by_field:
+        st.caption("Most corrected: " + ", ".join(f"{f.replace('_', ' ')} ({n} of {t})"
+                                                   for f, n, t in report.most_corrected()))
