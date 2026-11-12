@@ -19,7 +19,7 @@ from pathlib import Path
 import anthropic
 import pydantic
 
-from leasedesk import config, db, wire_format
+from leasedesk import config, db, documents, wire_format
 from leasedesk.models import DocumentType, LeaseAbstract
 
 SYSTEM_PROMPT = """You are an experienced commercial real estate lease administrator \
@@ -94,7 +94,7 @@ def make_client(api_key: str) -> anthropic.Anthropic:
 
 def abstract_pdf(client: anthropic.Anthropic, pdf_path: Path) -> ExtractionResult:
     """Send one PDF to Claude and return a validated abstract."""
-    pdf_b64 = base64.standard_b64encode(Path(pdf_path).read_bytes()).decode("ascii")
+    pdf_b64 = base64.standard_b64encode(documents.pdf_for_api(Path(pdf_path))).decode("ascii")
     try:
         response = client.beta.messages.create(
             model=config.EXTRACTION_MODEL,

@@ -44,3 +44,57 @@ def test_current_monthly_rent_picks_active_step():
     ])
     assert abstract.current_monthly_rent(date(2026, 3, 1)) == 5150
     assert abstract.current_monthly_rent(date(2030, 1, 1)) is None
+
+
+def test_oversized_pdfs_are_sent_as_a_smaller_copy(tmp_path, monkeypatch):
+    import io
+
+    import pdfplumber
+
+    from leasedesk import config, demo_data, documents
+
+    lease = demo_data.build_demo_portfolio()[0]
+    path = tmp_path / "big.pdf"
+    path.write_bytes(lease.pdf_bytes)
+    assert documents.pdf_for_api(path) == lease.pdf_bytes  # small files are sent as they are
+
+    monkeypatch.setattr(config, "MAX_SEND_BYTES", len(lease.pdf_bytes) - 1)
+    smaller = documents.pdf_for_api(path)
+    assert smaller != lease.pdf_bytes and smaller.startswith(b"%PDF")
+    with pdfplumber.open(io.BytesIO(smaller)) as pdf:
+        assert len(pdf.pages) == documents.inspect_pdf(path).page_count
+    assert path.read_bytes() == lease.pdf_bytes  # the original file is untouched
+
+
+def test_a_pdf_whose_pages_one_reader_cant_find_is_repaired_before_shrinking(monkeypatch):
+    """Some scanned files have a damaged page index: pdfplumber finds no pages, pypdf finds them all."""
+    import io
+
+    import pdfplumber
+
+    from leasedesk import demo_data, documents
+
+    damaged = demo_data.build_demo_portfolio()[0].pdf_bytes
+    real_open = pdfplumber.open
+
+    class NoPages:
+        pages = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def open_(source, *args, **kwargs):
+        data = source.getvalue() if isinstance(source, io.BytesIO) else None
+        return NoPages() if data == damaged else real_open(source, *args, **kwargs)
+
+    monkeypatch.setattr(documents.pdfplumber, "open", open_)
+    repaired = documents.repair_pdf(damaged)
+    assert repaired != damaged
+    with real_open(io.BytesIO(repaired)) as pdf:
+        assert len(pdf.pages) == 4
+    assert documents.shrink_pdf(damaged).startswith(b"%PDF")
+    monkeypatch.undo()
+    assert documents.repair_pdf(damaged) == damaged  # healthy files are left alone

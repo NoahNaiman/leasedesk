@@ -383,7 +383,7 @@ def add_lease_documents(conn, root: Path, property_ids: list[int],
             if not data.startswith(b"%PDF"):
                 raise ValueError("Not a readable PDF.")
             if len(data) > config.MAX_PDF_BYTES:
-                raise ValueError("Larger than 32 MB; split it into smaller PDFs to abstract it.")
+                raise ValueError("Larger than 300 MB; split it into smaller PDFs.")
             info = documents.inspect_pdf(path)
             if info.page_count > config.MAX_PDF_PAGES:
                 raise ValueError(f"{info.page_count} pages; the limit is {config.MAX_PDF_PAGES}.")
