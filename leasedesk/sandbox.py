@@ -20,7 +20,7 @@ Every tenant, person and address is fictional.
 from __future__ import annotations
 
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -221,15 +221,19 @@ class Sandbox:
     library_root: Path
     data_dir: Path
     files: list[SandboxFile]
+    exports_dir: Path | None = None
+    rent_roll_planted: list = field(default_factory=list)   # answer key for the rent roll check
 
 
 def build_sandbox(folder: Path, today: date | None = None) -> Sandbox:
     """Write the property folders and a matching LeaseDesk database into ``folder``."""
     import shutil
 
+    today = today or date.today()
+
     folder = Path(folder)
-    root, data_dir = folder / "Properties", folder / "data"
-    for sub in (root, data_dir):
+    root, data_dir, exports_dir = folder / "Properties", folder / "data", folder / "exports"
+    for sub in (root, data_dir, exports_dir):
         if sub.exists():
             shutil.rmtree(sub)
     data_dir.mkdir(parents=True)
@@ -265,4 +269,12 @@ def build_sandbox(folder: Path, today: date | None = None) -> Sandbox:
             elif state in (APPROVED, REVIEW) and f.abstract is not None:
                 db.save_ai_abstract(conn, doc.id, f.abstract, input_tokens=30_000, output_tokens=4_000,
                                     approved=state == APPROVED)
-    return Sandbox(folder, root, data_dir, files)
+
+        # A fictional accounting export with known problems planted (see sandbox_exports.py).
+        from leasedesk import sandbox_exports
+
+        exports_dir.mkdir()
+        csv_bytes, planted = sandbox_exports.rent_roll(db.list_documents(conn, db.STATUS_APPROVED),
+                                                       db.list_documents(conn, db.STATUS_REVIEW), today)
+        (exports_dir / sandbox_exports.RENT_ROLL_FILE).write_bytes(csv_bytes)
+    return Sandbox(folder, root, data_dir, files, exports_dir, planted)

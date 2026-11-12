@@ -21,6 +21,7 @@ PAGES = {
     "views/tenants.py": "Tenants",
     "views/library.py": "Lease library",
     "views/critical_dates.py": "Critical dates",
+    "views/rent_roll.py": "Rent roll check",
     "views/import_leases.py": "Import leases",
     "views/review.py": "Review abstracts",
     "views/settings.py": "Settings",
@@ -128,3 +129,13 @@ def test_tenant_page_shows_merged_terms_with_sources(app):
     assert "Current terms" in page
     assert "Base document" in page and "Applied second" in page
     assert "from Amendment" in page  # the extended expiration and rent are labelled with their source
+
+
+def test_rent_roll_page_checks_the_sandbox_sample(app):
+    at = app.open("views/rent_roll.py")
+    next(b for b in at.button if b.label == "Use the sandbox's sample rent roll").click().run()
+    assert not at.exception
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Rent roll lines"] == "12" and metrics["Matched to a lease"] == "9"
+    issues = set(at.dataframe[0].value["Issue"])
+    assert {"Missed escalation", "Rent mismatch", "Not in rent roll", "Not in LeaseDesk"} <= issues

@@ -19,6 +19,9 @@ pages = {
         st.Page("views/library.py", title="Lease library", icon=":material/menu_book:"),
         st.Page("views/critical_dates.py", title="Critical dates", icon=":material/event:"),
     ],
+    "Accounting": [
+        st.Page("views/rent_roll.py", title="Rent roll check", icon=":material/receipt_long:"),
+    ],
     "Leases": [
         st.Page("views/import_leases.py", title="Import leases", icon=":material/upload_file:"),
         st.Page("views/review.py", title="Review abstracts", icon=":material/fact_check:"),
