@@ -64,3 +64,37 @@ def test_oversized_pdfs_are_sent_as_a_smaller_copy(tmp_path, monkeypatch):
     with pdfplumber.open(io.BytesIO(smaller)) as pdf:
         assert len(pdf.pages) == documents.inspect_pdf(path).page_count
     assert path.read_bytes() == lease.pdf_bytes  # the original file is untouched
+
+
+def test_a_pdf_whose_pages_one_reader_cant_find_is_repaired_before_shrinking(monkeypatch):
+    """Some scanned files have a damaged page index: pdfplumber finds no pages, pypdf finds them all."""
+    import io
+
+    import pdfplumber
+
+    from leasedesk import demo_data, documents
+
+    damaged = demo_data.build_demo_portfolio()[0].pdf_bytes
+    real_open = pdfplumber.open
+
+    class NoPages:
+        pages = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def open_(source, *args, **kwargs):
+        data = source.getvalue() if isinstance(source, io.BytesIO) else None
+        return NoPages() if data == damaged else real_open(source, *args, **kwargs)
+
+    monkeypatch.setattr(documents.pdfplumber, "open", open_)
+    repaired = documents.repair_pdf(damaged)
+    assert repaired != damaged
+    with real_open(io.BytesIO(repaired)) as pdf:
+        assert len(pdf.pages) == 4
+    assert documents.shrink_pdf(damaged).startswith(b"%PDF")
+    monkeypatch.undo()
+    assert documents.repair_pdf(damaged) == damaged  # healthy files are left alone

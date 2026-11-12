@@ -52,10 +52,11 @@ def records(status: str | None = None) -> list[db.LeaseRecord]:
 @st.cache_data(show_spinner=False, max_entries=64)
 def page_image(pdf_path: str, page_number: int, resolution: int = 160):
     """Render one PDF page (1-based) for on-screen reading, with blank margins trimmed."""
-    import pdfplumber
     from PIL import ImageOps
 
-    with pdfplumber.open(pdf_path) as pdf:
+    from leasedesk import documents
+
+    with documents.open_pdf(pdf_path) as pdf:
         img = pdf.pages[page_number - 1].to_image(resolution=resolution).original.convert("RGB")
     # Find the printed area (anything noticeably darker than paper) and crop to it.
     ink = ImageOps.invert(img.convert("L")).point(lambda v: 255 if v > 40 else 0)

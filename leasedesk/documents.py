@@ -38,15 +38,48 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def open_pdf(path: Path):
+    """Open a PDF with pdfplumber, repairing a damaged page index first if needed."""
+    import io
+
+    with pdfplumber.open(path) as pdf:
+        healthy = bool(pdf.pages)
+    if healthy:
+        return pdfplumber.open(path)
+    return pdfplumber.open(io.BytesIO(repair_pdf(Path(path).read_bytes())))
+
+
 def inspect_pdf(path: Path) -> PdfInfo:
     """Count pages and guess whether the PDF is scanned (no text layer)."""
-    with pdfplumber.open(path) as pdf:
+    with open_pdf(path) as pdf:
         pages = pdf.pages
         sample = pages[: min(len(pages), 5)]
         text_pages = sum(
             1 for p in sample if len((p.extract_text() or "").strip()) >= _MIN_TEXT_CHARS_PER_PAGE
         )
         return PdfInfo(page_count=len(pages), is_scanned=text_pages < max(1, len(sample) // 2))
+
+
+def repair_pdf(data: bytes) -> bytes:
+    """Rewrite a PDF whose page index is damaged, so every reader finds its pages.
+
+    Some scanner software writes a broken cross-reference table: pdfplumber then sees no pages
+    while pypdf, which rebuilds the index, sees them all. Healthy files are returned unchanged.
+    """
+    import io
+
+    from pypdf import PdfReader, PdfWriter
+
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        if pdf.pages:
+            return data
+    reader = PdfReader(io.BytesIO(data))
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
 
 
 def shrink_pdf(data: bytes, resolution: int = 110) -> bytes:
@@ -58,9 +91,11 @@ def shrink_pdf(data: bytes, resolution: int = 110) -> bytes:
     import io
 
     pages = []
-    with pdfplumber.open(io.BytesIO(data)) as pdf:
+    with pdfplumber.open(io.BytesIO(repair_pdf(data))) as pdf:
         for page in pdf.pages:
             pages.append(page.to_image(resolution=resolution).original.convert("L"))
+    if not pages:
+        raise ValueError("The PDF's pages couldn't be read.")
     out = io.BytesIO()
     pages[0].save(out, format="PDF", save_all=True, append_images=pages[1:], resolution=resolution)
     return out.getvalue()
