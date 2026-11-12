@@ -55,6 +55,7 @@ property folders ──► library.py: index files, pick out lease documents (ru
                              abstract_json    (human-reviewed)
                           │  approve
                           ▼
+             merge.py: each tenant's lease + amendments → current terms, with sources
              portfolio.py: properties, tenants, critical dates, Excel and .ics export
              corrections.py: how often reviewers changed the AI draft
 ```
@@ -182,6 +183,17 @@ workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` s
 - **Evidence for key values.** The prompt asks for a page number, a short verbatim quote and a
   confidence level for each important value. The review screen jumps to the cited page. Coverage is
   measured, not assumed: about three quarters of filled-in scored fields are cited in the latest run.
+- **Amendments are merged into current terms.** Each document is abstracted on its own. An
+  amendment's abstract holds only what it changes. `merge.py` applies a tenant's documents in date
+  order, starting from the newest lease:
+  - A later document replaces only what it states, and "unknown" never overwrites a known value.
+  - An amendment's rent table replaces the rent from its first step onward.
+  - New options replace old ones.
+  - The lease's own dates come from the lease.
+
+  Every merged value records the document it came from, and the Tenants page labels values a later
+  document changed. Tenant lists, property totals and critical dates all use the merged terms, so an
+  amended expiration doesn't also appear from the original lease.
 - **Conventions are enforced in code where the model is inconsistent.** One example is defaulting
   the rent commencement date to the commencement date when a lease states none. The rule lives in
   `extraction.apply_conventions`, so it holds whatever the model returns.
@@ -191,7 +203,7 @@ workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` s
 ## Testing
 
 ```bash
-.venv/bin/pytest        # 115 tests, about 40 seconds
+.venv/bin/pytest        # 126 tests, about 40 seconds
 ```
 
 - **Offline:** the suite runs with no network access. The Anthropic API is replaced by an httpx
@@ -210,9 +222,9 @@ workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` s
 
 ## Limitations
 
-- **Amendments aren't merged into one set of current terms.** A tenant's documents are grouped, and
-  the tenant list shows the newest stated suite, rent and expiration. The detailed terms still come
-  from the original lease.
+- **Merging follows fixed rules.** For example, an amendment that lists options replaces all earlier
+  options, so a termination right that survives an amendment would be dropped. Each merged value
+  shows its source document so this can be caught in review.
 - **Current rent can be missing.** When the documents don't state it (for example, an extension
   that keeps CPI-adjusted rent), it has to come from the accounting system.
 - **Not every value is cited.** Citation coverage is about 73%.

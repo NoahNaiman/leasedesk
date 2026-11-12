@@ -114,3 +114,17 @@ def test_failed_document_can_be_removed_without_touching_the_file(app):
     with db.connect() as conn:
         assert not db.list_documents(conn, db.STATUS_FAILED)
     assert os.path.exists(failed.stored_path)
+
+
+def test_tenant_page_shows_merged_terms_with_sources(app):
+    from leasedesk import portfolio
+
+    with db.connect() as conn:
+        groups = portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))
+    harbor = next(g for g in groups if g.name == "Harbor Mattress")
+    app.session_state["tenant_key"] = harbor.key
+    at = app.open("views/tenants.py")
+    page = texts(at)
+    assert "Current terms" in page
+    assert "Base document" in page and "Applied second" in page
+    assert "from Amendment" in page  # the extended expiration and rent are labelled with their source

@@ -83,3 +83,15 @@ def test_rebuilding_starts_fresh(tmp_path):
 
 def test_sandbox_never_has_an_api_key(sb):
     assert "ANTHROPIC_API_KEY" not in (sb.data_dir / "settings.env").read_text()
+
+
+def test_critical_dates_use_merged_terms(sbconn):
+    approved = db.list_documents(sbconn, db.STATUS_APPROVED)
+    harbor = next(g for g in portfolio.tenant_groups(approved) if g.name == "Harbor Mattress")
+    lease = next(r for r in harbor.records if r.abstract.document_type.value == "lease")
+    events = portfolio.critical_dates(approved, TODAY, days_ahead=3650, include_past_days=3650)
+    expirations = [e.when for e in events if e.tenant == "Harbor Mattress" and e.event == portfolio.EVENT_EXPIRATION]
+    # Only the extended expiration: the original lease's date was replaced by the amendment.
+    assert expirations == [harbor.terms.expiration_date]
+    assert lease.abstract.expiration_date not in expirations
+    assert harbor.merged.source("expiration_date").kind == "amendment"
