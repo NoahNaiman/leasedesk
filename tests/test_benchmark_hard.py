@@ -114,7 +114,6 @@ def test_benchmark_script_scores_a_perfect_fake_api_at_100_percent(monkeypatch, 
     import anthropic
     import httpx2 as httpx
 
-    from leasedesk import extraction
 
     answers = {c.pdf_bytes: c.abstract for c in CASES.values()}
 

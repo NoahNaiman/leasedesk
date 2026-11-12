@@ -8,11 +8,11 @@ Keeping both lets us measure how often the AI needed correcting.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
 
 from leasedesk import config
 from leasedesk.models import LeaseAbstract
@@ -111,7 +111,7 @@ class LeaseRecord:
     tenant_override: str | None = None  # tenant chosen by hand; groups documents across folders
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "LeaseRecord":
+    def from_row(cls, row: sqlite3.Row) -> LeaseRecord:
         def parse(text: str | None) -> LeaseAbstract | None:
             return LeaseAbstract.model_validate_json(text) if text else None
 
