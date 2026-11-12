@@ -20,7 +20,7 @@ import anthropic
 import pydantic
 
 from leasedesk import config, db, wire_format
-from leasedesk.models import LeaseAbstract
+from leasedesk.models import DocumentType, LeaseAbstract
 
 SYSTEM_PROMPT = """You are an experienced commercial real estate lease administrator \
 abstracting retail shopping center leases for a property manager.
@@ -44,7 +44,8 @@ verbatim quote, and your confidence. Use "low" confidence for anything hard to r
 or computed rather than stated.
 - Conventions: list each option separately, one entry per notice deadline ("three renewal options" \
 is three entries); co-tenancy remedies go in co_tenancy, not options. A lease with no CAM cap clause \
-has cam_cap_type "none". If the lease says there is no security deposit, leave security_deposit empty.
+has cam_cap_type "none". If the lease says there is no security deposit, leave security_deposit empty. \
+If a lease sets no separate rent commencement date, rent commences on the Commencement Date.
 - Put anything unusual that a property manager should know (side letters referenced, \
 unusual landlord obligations, rent abatement, kick-out clauses) in notes."""
 
@@ -69,6 +70,19 @@ class ExtractionResult:
 def estimate_cost(input_tokens: int | None, output_tokens: int | None) -> float:
     return ((input_tokens or 0) * config.MODEL_INPUT_PRICE_PER_MTOK
             + (output_tokens or 0) * config.MODEL_OUTPUT_PRICE_PER_MTOK) / 1_000_000
+
+
+def apply_conventions(abstract: LeaseAbstract) -> LeaseAbstract:
+    """Conventions applied in code after extraction, so they hold even when the model is
+    inconsistent about them.
+
+    - A lease that sets no separate rent commencement date: rent starts on the Commencement
+      Date. (Leases only: an amendment's dates describe what it changes.)
+    """
+    if (abstract.document_type == DocumentType.LEASE and abstract.rent_commencement_date is None
+            and abstract.commencement_date is not None):
+        abstract = abstract.model_copy(update={"rent_commencement_date": abstract.commencement_date})
+    return abstract
 
 
 def make_client(api_key: str) -> anthropic.Anthropic:
@@ -122,7 +136,7 @@ def abstract_pdf(client: anthropic.Anthropic, pdf_path: Path) -> ExtractionResul
         raise ExtractionError("The AI response could not be read as a lease abstract.") from exc
 
     return ExtractionResult(
-        abstract=abstract,
+        abstract=apply_conventions(abstract),
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
     )

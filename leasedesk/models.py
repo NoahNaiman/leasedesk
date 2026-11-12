@@ -137,7 +137,9 @@ class LeaseAbstract(BaseModel):
 
     lease_date: date | None = Field(None, description="Date the document was signed or is dated.")
     commencement_date: date | None = None
-    rent_commencement_date: date | None = None
+    rent_commencement_date: date | None = Field(
+        None, description="Date base rent starts. If the lease sets no separate rent commencement date, "
+        "use the Commencement Date.")
     expiration_date: date | None = None
 
     base_rent_schedule: list[RentStep] = Field(default_factory=list)

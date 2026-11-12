@@ -81,6 +81,7 @@ tests/                pytest suite (runs offline against a mocked API)
 
 ```bash
 .venv/bin/python scripts/evaluate_extraction.py --set all   # or --set standard / --set hard
+.venv/bin/python scripts/evaluate_extraction.py --rescore benchmark_results/<run>   # free
 ```
 
 Two sets of fictional leases with known-correct abstracts. Every field is scored, and a failed extraction counts as every field missed.
@@ -88,7 +89,7 @@ Two sets of fictional leases with known-correct abstracts. Every field is scored
 | Set | What it is | Latest result |
 |---|---|---|
 | **Standard** | The 12 demo leases: clean, one layout. Mostly a regression check. | 100% (338/338 fields), $1.36 |
-| **Hard** | 10 leases, each built around a known difficulty (see below). | 97.6% (243/249 fields), $1.04 |
+| **Hard** | 10 leases, each built around a known difficulty (see below). | 100% (249/249) after the rent commencement convention; 97.6% before, $1.04 |
 
 The hard leases cover:
 
@@ -106,7 +107,9 @@ The hard leases cover:
 
 `tests/test_benchmark_hard.py` checks each answer key against its own PDF offline.
 
-All 6 hard-set misses are one open convention: when a lease never states a separate rent commencement date, the answer key assumes it's the commencement date, while the AI leaves it blank. Every rent, date, share, cap and deadline was correct.
+All 6 misses in the first hard-set run were one convention. When a lease never states a separate rent commencement date, the answer key used the commencement date; the AI left it blank, and not consistently. That convention is now applied in code after extraction (leases only), and the saved answers re-score to 100%. Every rent, date, share, cap and deadline was already correct.
+
+Both sets now score 100%, so they no longer tell versions apart. They remain useful as regression checks.
 
 Building the hard set also turned up three errors in the answer keys, each fixed and covered by a test:
 

@@ -156,3 +156,19 @@ def test_a_failed_extraction_counts_as_all_fields_missed(monkeypatch):
     monkeypatch.setattr(extraction, "abstract_pdf", refuse)
     result = script.run_set("hard", client=None)
     assert result["correct"] == 0 and result["total"] > 200
+
+
+def test_rescoring_saved_answers_applies_conventions_and_counts_missing_files(tmp_path, monkeypatch):
+    path = Path(__file__).resolve().parent.parent / "scripts" / "evaluate_extraction.py"
+    spec = importlib.util.spec_from_file_location("evaluate_extraction", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    monkeypatch.setattr(bh, "build_hard_cases", lambda: list(CASES.values()))
+    for case in list(CASES.values())[:-1]:  # leave the last one unsaved
+        # Saved without a rent commencement date: the convention fills it in on re-scoring.
+        saved = case.abstract.model_copy(update={"rent_commencement_date": None}) \
+            if case.abstract.rent_commencement_date == case.abstract.commencement_date else case.abstract
+        (tmp_path / f"{Path(case.file_name).stem}.json").write_text(saved.model_dump_json())
+    result = script.rescore_set("hard", tmp_path)
+    missing = len(evaluation.compare(CASES["H10"].abstract, CASES["H10"].abstract))
+    assert result["total"] - result["correct"] == missing

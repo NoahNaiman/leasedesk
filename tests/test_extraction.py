@@ -96,3 +96,14 @@ def test_api_key_saved_privately(data_dir, monkeypatch):
     assert settings.get_api_key() == "sk-ant-test-1234567890"
     assert oct(config.SETTINGS_PATH.stat().st_mode & 0o777) == "0o600"
     assert settings.masked_api_key() == "sk-ant-…7890"
+
+
+def test_rent_commencement_defaults_to_commencement_for_leases_only():
+    from leasedesk.models import DocumentType
+
+    lease = LeaseAbstract(commencement_date=date(2025, 5, 1))
+    assert extraction.apply_conventions(lease).rent_commencement_date == date(2025, 5, 1)
+    stated = LeaseAbstract(commencement_date=date(2025, 5, 1), rent_commencement_date=date(2025, 8, 1))
+    assert extraction.apply_conventions(stated).rent_commencement_date == date(2025, 8, 1)
+    amendment = LeaseAbstract(document_type=DocumentType.AMENDMENT, commencement_date=date(2030, 5, 1))
+    assert extraction.apply_conventions(amendment).rent_commencement_date is None
