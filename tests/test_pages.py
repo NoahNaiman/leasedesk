@@ -22,6 +22,7 @@ PAGES = {
     "views/library.py": "Lease library",
     "views/critical_dates.py": "Critical dates",
     "views/rent_roll.py": "Rent roll check",
+    "views/distributions.py": "Partner distributions",
     "views/import_leases.py": "Import leases",
     "views/review.py": "Review abstracts",
     "views/settings.py": "Settings",
@@ -139,3 +140,24 @@ def test_rent_roll_page_checks_the_sandbox_sample(app):
     assert metrics["Rent roll lines"] == "12" and metrics["Matched to a lease"] == "9"
     issues = set(at.dataframe[0].value["Issue"])
     assert {"Missed escalation", "Rent mismatch", "Not in rent roll", "Not in LeaseDesk"} <= issues
+
+
+def test_distributions_page_previews_and_records_a_distribution(app):
+    from leasedesk import distributions as dist
+
+    at = app.open("views/distributions.py")
+    assert at.selectbox[0].value == "Maple Ridge Plaza Partners LLC"
+    at.selectbox[0].set_value("Willow Creek Commons Owner LLC").run()
+    with db.connect() as conn:
+        willow = next(p for p in dist.list_partnerships(conn) if p.name.startswith("Willow"))
+        before = len(dist.list_distributions(conn, willow.id))
+    amount = next(n for n in at.number_input if n.label == "Amount to distribute")
+    amount.set_value(100_000.0).run()
+    assert not at.exception
+    preview = next(d.value for d in at.dataframe if "Total" in d.value.columns and "Date" not in d.value.columns)
+    assert len(preview) == 2 and round(preview["Total"].sum(), 2) == 100_000.00
+    # Capital was returned by the 2025 refinancing, so new cash is residual: promote plus pro rata split.
+    assert {"Promote", "Residual split"} <= set(preview.columns)
+    next(b for b in at.button if b.label == "Record this distribution").click().run()
+    with db.connect() as conn:
+        assert len(dist.list_distributions(conn, willow.id)) == before + 1

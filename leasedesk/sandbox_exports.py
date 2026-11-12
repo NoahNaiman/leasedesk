@@ -85,3 +85,35 @@ def rent_roll(approved: list[LeaseRecord], awaiting_review: list[LeaseRecord],
         w.writerow([prop, "", "Total", "", "", "", f"{total:,.2f}"])
     w.writerow(["", "", "Grand Total", "", "", "", ""])
     return buf.getvalue().encode(), planted
+
+
+# --------------------------------------------------------------------------- partnerships
+
+def seed_partnerships(conn, today: date) -> None:
+    """Two fictional ownership partnerships with distribution histories up to ``today``."""
+    from leasedesk import distributions as dist
+
+    willow = dist.Partnership(
+        "Willow Creek Commons Owner LLC", dist.STRUCTURE_WATERFALL, date(2023, 1, 1),
+        [dist.Partner("Cedar Ridge Fund I LP", capital=4_500_000),
+         dist.Partner("Willow Creek Partners LLC", capital=500_000, is_sponsor=True)],
+        pref_rate_pct=8.0, promote_pct=20.0, property_name="Willow Creek Commons")
+    maple = dist.Partnership(
+        "Maple Ridge Plaza Partners LLC", dist.STRUCTURE_PRO_RATA, date(2021, 7, 1),
+        [dist.Partner("Hollis Family Trust", capital=600_000, ownership_pct=50),
+         dist.Partner("Avery Lin", capital=360_000, ownership_pct=30),
+         dist.Partner("Marcus Bell", capital=240_000, ownership_pct=20)],
+        property_name="Maple Ridge Plaza")
+    for p, first, amount, growth in ((willow, date(2023, 4, 15), 85_000, 0.02),
+                                     (maple, date(2021, 10, 15), 24_000, 0.03)):
+        pid = dist.save_partnership(conn, p)
+        quarter, n = first, 0
+        while quarter <= today:
+            q_amount = round(amount * (1 + growth) ** (n // 4), -2)
+            dist.record_distribution(conn, pid, dist.Distribution(
+                quarter, q_amount, f"Q{(quarter.month - 1) // 3 or 4} operating cash flow"))
+            quarter += relativedelta(months=3)
+            n += 1
+        if p is willow and today >= date(2025, 6, 30):
+            dist.record_distribution(conn, pid, dist.Distribution(date(2025, 6, 30), 5_600_000,
+                                                                  "Refinance proceeds"))

@@ -277,4 +277,5 @@ def build_sandbox(folder: Path, today: date | None = None) -> Sandbox:
         csv_bytes, planted = sandbox_exports.rent_roll(db.list_documents(conn, db.STATUS_APPROVED),
                                                        db.list_documents(conn, db.STATUS_REVIEW), today)
         (exports_dir / sandbox_exports.RENT_ROLL_FILE).write_bytes(csv_bytes)
+        sandbox_exports.seed_partnerships(conn, today)
     return Sandbox(folder, root, data_dir, files, exports_dir, planted)

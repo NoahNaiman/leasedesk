@@ -21,6 +21,7 @@ pages = {
     ],
     "Accounting": [
         st.Page("views/rent_roll.py", title="Rent roll check", icon=":material/receipt_long:"),
+        st.Page("views/distributions.py", title="Partner distributions", icon=":material/account_balance:"),
     ],
     "Leases": [
         st.Page("views/import_leases.py", title="Import leases", icon=":material/upload_file:"),
