@@ -85,6 +85,23 @@ ANTHROPIC_API_KEY=sk-ant-... .venv/bin/python scripts/evaluate_extraction.py
 
 This abstracts all 12 demo leases (two of them scans) and reports per-field accuracy, the most-missed fields, and the total API cost.
 
+**Results (November 2026, `claude-opus-5-5`):**
+
+| Run | Field accuracy | Cost |
+|---|---|---|
+| First run | 96.0% | $1.38 |
+| After writing down the conventions | 100% | $1.35 |
+
+The first run got every rent, date, share, and deadline right. All 13 misses were cases where the answer key and the AI followed different conventions:
+
+- a lease with no CAM cap clause is cap type "none", not "unknown"
+- "three renewal options" is three options, one per notice deadline
+- a lease that requires no deposit leaves the deposit blank, not $0
+
+Those conventions are now part of the schema and the AI's instructions, so real leases follow them too.
+
+What the benchmark doesn't show: the demo leases are clean and follow one layout, so it guards against regressions but overstates accuracy on real leases. Real leases are messier: decades-old scans, handwritten changes, terms spread across amendments. For those, the honest measure is how often reviewers correct the AI. LeaseDesk keeps the AI's original draft next to the approved version for exactly that reason.
+
 ## Development
 
 ```bash

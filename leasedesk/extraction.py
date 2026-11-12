@@ -42,6 +42,9 @@ set document_type accordingly and fill in only what this document establishes or
 - For each important value, add an evidence entry with the 1-based PDF page number, a short \
 verbatim quote, and your confidence. Use "low" confidence for anything hard to read, ambiguous, \
 or computed rather than stated.
+- Conventions: list each option separately, one entry per notice deadline ("three renewal options" \
+is three entries); co-tenancy remedies go in co_tenancy, not options. A lease with no CAM cap clause \
+has cam_cap_type "none". If the lease says there is no security deposit, leave security_deposit empty.
 - Put anything unusual that a property manager should know (side letters referenced, \
 unusual landlord obligations, rent abatement, kick-out clauses) in notes."""
 

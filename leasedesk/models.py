@@ -64,11 +64,16 @@ class RentStep(BaseModel):
 
 
 class LeaseOption(BaseModel):
+    """One option right with its own notice deadline. A lease granting "three renewal options of
+    five years each" has three entries. Remedies that only arise if a co-tenancy requirement
+    fails belong in ``co_tenancy``, not here."""
+
     option_type: OptionType
     notice_deadline: date | None = Field(
         None,
         description="Last date the tenant must give notice to exercise. Compute it from "
-        "the notice window if the lease states one (e.g. 'no later than 180 days before expiration').",
+        "the notice window if the lease states one (e.g. 'no later than 180 days before expiration'). "
+        "For a later option in a series, compute it as if the earlier options were exercised.",
     )
     term_months: int | None = Field(None, description="Length of the option term in months, if any.")
     description: str = Field(description="Plain-English summary, including rent terms for the option period.")
@@ -87,7 +92,12 @@ class Recoveries(BaseModel):
     pays_taxes: bool | None = None
     pays_insurance: bool | None = None
     cam_cap_pct: float | None = Field(None, description="Annual cap on controllable CAM increases, as a percentage.")
-    cam_cap_type: CapType = CapType.UNKNOWN
+    cam_cap_type: CapType = Field(
+        CapType.UNKNOWN,
+        description="'none' when the lease does not cap CAM increases (including when it never mentions "
+        "a cap); 'cumulative' or 'non_cumulative' for a cap; 'unknown' only when there is a cap whose "
+        "type can't be determined or the text can't be read.",
+    )
     base_year: int | None = Field(None, description="Base year for expense stops, if any.")
     admin_fee_pct: float | None = Field(None, description="Landlord admin/management fee on CAM, as a percentage.")
     gross_up_pct: float | None = Field(
@@ -131,7 +141,8 @@ class LeaseAbstract(BaseModel):
     expiration_date: date | None = None
 
     base_rent_schedule: list[RentStep] = Field(default_factory=list)
-    security_deposit: float | None = None
+    security_deposit: float | None = Field(
+        None, description="Security deposit in dollars. Leave empty when the lease requires none.")
     recoveries: Recoveries = Field(default_factory=Recoveries)
     percentage_rent: PercentageRent | None = None
     options: list[LeaseOption] = Field(default_factory=list)

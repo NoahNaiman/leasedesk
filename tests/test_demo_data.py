@@ -49,3 +49,19 @@ def test_demo_can_be_removed(conn, data_dir):
     assert demo_data.remove_demo_from_db(conn) == len(demo_data.TENANTS)
     assert db.list_documents(conn) == []
     assert list((data_dir / "documents").glob("*.pdf")) == []
+
+
+def test_each_option_in_a_series_has_its_own_deadline():
+    from datetime import date
+
+    from dateutil.relativedelta import relativedelta
+
+    from leasedesk import demo_data
+
+    leases = {l.abstract.trade_name: l.abstract for l in demo_data.build_demo_portfolio(date(2026, 11, 11))}
+    brightside = leases["Brightside Pharmacy"]
+    deadlines = [o.notice_deadline for o in brightside.options]
+    assert len(deadlines) == 3
+    assert deadlines[0] == brightside.expiration_date - relativedelta(days=180)
+    assert deadlines[1] == deadlines[0] + relativedelta(months=60)
+    assert len(leases["Copper Kettle Coffee"].options) == 1

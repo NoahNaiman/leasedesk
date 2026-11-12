@@ -165,6 +165,9 @@ def _rent_schedule(t: DemoTenant, commencement: date) -> list[RentStep]:
     return merged
 
 
+_OPTION_COUNTS = {"one": 1, "two": 2, "three": 3, "four": 4}
+
+
 def build_abstract(t: DemoTenant, today: date) -> LeaseAbstract:
     commencement = _first_of_month(today + relativedelta(months=t.start_offset_months))
     expiration = commencement + relativedelta(years=t.term_years, days=-1)
@@ -175,10 +178,17 @@ def build_abstract(t: DemoTenant, today: date) -> LeaseAbstract:
     for opt_type, months, text in t.options:
         if opt_type == OptionType.TERMINATION:
             deadline = commencement + relativedelta(years=7) - relativedelta(months=9)
-        else:
-            deadline = expiration - relativedelta(days=180)
-        options.append(LeaseOption(option_type=opt_type, notice_deadline=deadline,
-                                   term_months=months or None, description=text))
+            options.append(LeaseOption(option_type=opt_type, notice_deadline=deadline,
+                                       term_months=months or None, description=text))
+            continue
+        # "Three renewal options of five years each" is three options, one per notice deadline:
+        # each later deadline assumes the earlier options were exercised.
+        count = _OPTION_COUNTS.get(text.split()[0].lower(), 1)
+        for k in range(count):
+            deadline = expiration + relativedelta(months=months * k) - relativedelta(days=180)
+            label = f"Renewal option {k + 1} of {count}. " if count > 1 else ""
+            options.append(LeaseOption(option_type=opt_type, notice_deadline=deadline,
+                                       term_months=months or None, description=label + text))
 
     pct_rent = None
     if t.percentage_rent_pct:
