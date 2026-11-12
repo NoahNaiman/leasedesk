@@ -21,8 +21,11 @@ EXTRACTION_MODEL = "claude-opus-5-5"
 MODEL_INPUT_PRICE_PER_MTOK = 4.00
 MODEL_OUTPUT_PRICE_PER_MTOK = 20.00
 
-# Claude accepts PDFs up to 32 MB per request and 600 pages.
-MAX_PDF_BYTES = 32 * 1024 * 1024
+# The API accepts requests up to 32 MB and PDFs up to 600 pages. PDFs are sent base64-encoded
+# (a third larger), so a file over MAX_SEND_BYTES is sent as a smaller copy made of compressed
+# page images (documents.pdf_for_api). MAX_PDF_BYTES only guards against absurd files.
+MAX_SEND_BYTES = 23 * 1024 * 1024
+MAX_PDF_BYTES = 300 * 1024 * 1024
 MAX_PDF_PAGES = 600
 
 

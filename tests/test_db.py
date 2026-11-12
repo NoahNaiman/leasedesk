@@ -44,3 +44,23 @@ def test_current_monthly_rent_picks_active_step():
     ])
     assert abstract.current_monthly_rent(date(2026, 3, 1)) == 5150
     assert abstract.current_monthly_rent(date(2030, 1, 1)) is None
+
+
+def test_oversized_pdfs_are_sent_as_a_smaller_copy(tmp_path, monkeypatch):
+    import io
+
+    import pdfplumber
+
+    from leasedesk import config, demo_data, documents
+
+    lease = demo_data.build_demo_portfolio()[0]
+    path = tmp_path / "big.pdf"
+    path.write_bytes(lease.pdf_bytes)
+    assert documents.pdf_for_api(path) == lease.pdf_bytes  # small files are sent as they are
+
+    monkeypatch.setattr(config, "MAX_SEND_BYTES", len(lease.pdf_bytes) - 1)
+    smaller = documents.pdf_for_api(path)
+    assert smaller != lease.pdf_bytes and smaller.startswith(b"%PDF")
+    with pdfplumber.open(io.BytesIO(smaller)) as pdf:
+        assert len(pdf.pages) == documents.inspect_pdf(path).page_count
+    assert path.read_bytes() == lease.pdf_bytes  # the original file is untouched
