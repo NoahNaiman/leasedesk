@@ -80,27 +80,42 @@ tests/                pytest suite (runs offline against a mocked API)
 ## Measuring accuracy
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... .venv/bin/python scripts/evaluate_extraction.py
+.venv/bin/python scripts/evaluate_extraction.py --set all   # or --set standard / --set hard
 ```
 
-This abstracts all 12 demo leases (two of them scans) and reports per-field accuracy, the most-missed fields, and the total API cost.
+Two sets of fictional leases with known-correct abstracts. Every field is scored, and a failed extraction counts as every field missed.
 
-**Results (November 2026, `claude-opus-5-5`):**
-
-| Run | Field accuracy | Cost |
+| Set | What it is | Latest result |
 |---|---|---|
-| First run | 96.0% | $1.38 |
-| After writing down the conventions | 100% | $1.35 |
+| **Standard** | The 12 demo leases: clean, one layout. Mostly a regression check. | 100% (338/338 fields), $1.36 |
+| **Hard** | 10 leases, each built around a known difficulty (see below). | 97.6% (243/249 fields), $1.04 |
 
-The first run got every rent, date, share, and deadline right. All 13 misses were cases where the answer key and the AI followed different conventions:
+The hard leases cover:
 
-- a lease with no CAM cap clause is cap type "none", not "unknown"
-- "three renewal options" is three options, one per notice deadline
-- a lease that requires no deposit leaves the deposit blank, not $0
+- rent described in prose
+- dates written in words or set by formula
+- notice windows in months
+- a lease and amendment in one file
+- struck-through, hand-initialed corrections
+- a degraded 16-page scan with terms buried in later articles
+- a pro-rata share defined only as a formula
+- an indirectly described cumulative cap
+- annual-only rent with a base year
+- distractor figures
+- a guarantor named only in an exhibit
 
-Those conventions are now part of the schema and the AI's instructions, so real leases follow them too.
+`tests/test_benchmark_hard.py` checks each answer key against its own PDF offline.
 
-What the benchmark doesn't show: the demo leases are clean and follow one layout, so it guards against regressions but overstates accuracy on real leases. Real leases are messier: decades-old scans, handwritten changes, terms spread across amendments. For those, the honest measure is how often reviewers correct the AI. LeaseDesk keeps the AI's original draft next to the approved version for exactly that reason.
+All 6 hard-set misses are one open convention: when a lease never states a separate rent commencement date, the answer key assumes it's the commencement date, while the AI leaves it blank. Every rent, date, share, cap and deadline was correct.
+
+Building the hard set also turned up three errors in the answer keys, each fixed and covered by a test:
+
+- a leap-year option deadline
+- two leases marked triple-net whose text never said so
+
+Raw AI answers from each run are saved in `benchmark_results/` (git-ignored), so a run can be re-scored without paying again.
+
+**What these numbers don't show:** the leases are generated, and the same person who wrote them wrote the answer keys. Real leases add things no generator covers: decades-old scans, handwriting in margins, terms split across amendments, and genuinely ambiguous drafting. The honest real-world measure is how often reviewers correct the AI. LeaseDesk keeps the AI's original draft next to every approved abstract so that correction rate can be measured.
 
 ## Development
 

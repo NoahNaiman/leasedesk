@@ -34,6 +34,20 @@ def _norm_text(v: str) -> str:
     return re.sub(r"[^a-z0-9]", "", v.lower())
 
 
+def _norm_name(v: str) -> str:
+    """A party's name without its entity description: "Acme, LLC, a Colorado limited liability
+    company" and "Acme LLC" are the same answer."""
+    return _norm_text(re.split(r",\s+an?\s+", v, maxsplit=1)[0])
+
+
+def _norm_suite(v: str) -> str:
+    """ "Suite 104", "Unit 104" and "104" are the same answer."""
+    return _norm_text(re.sub(r"^\s*(suite|ste\.?|unit|space|premises)\s+", "", v, flags=re.IGNORECASE))
+
+
+NAME_FIELDS = {"tenant_name", "trade_name", "guarantor"}
+
+
 def values_match(expected, actual, rel_tol: float = 0.005) -> bool:
     if expected is None or actual is None:
         return expected is None and actual is None
@@ -50,7 +64,13 @@ def compare(expected: LeaseAbstract, actual: LeaseAbstract) -> list[FieldResult]
     results: list[FieldResult] = []
 
     def check(name, e, a):
-        results.append(FieldResult(name, e, a, values_match(e, a)))
+        if isinstance(e, str) and isinstance(a, str) and name in NAME_FIELDS:
+            ok = _norm_name(e) == _norm_name(a)
+        elif isinstance(e, str) and isinstance(a, str) and name == "suite":
+            ok = _norm_suite(e) == _norm_suite(a)
+        else:
+            ok = values_match(e, a)
+        results.append(FieldResult(name, e, a, ok))
 
     for f in SCALAR_FIELDS:
         check(f, getattr(expected, f), getattr(actual, f))

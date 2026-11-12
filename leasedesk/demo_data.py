@@ -185,7 +185,10 @@ def build_abstract(t: DemoTenant, today: date) -> LeaseAbstract:
         # each later deadline assumes the earlier options were exercised.
         count = _OPTION_COUNTS.get(text.split()[0].lower(), 1)
         for k in range(count):
-            deadline = expiration + relativedelta(months=months * k) - relativedelta(days=180)
+            # Count from the commencement date so month-ends and leap days land correctly
+            # (a term ending in a leap February ends on the 29th).
+            term_end = commencement + relativedelta(years=t.term_years, months=months * k) - relativedelta(days=1)
+            deadline = term_end - relativedelta(days=180)
             label = f"Renewal option {k + 1} of {count}. " if count > 1 else ""
             options.append(LeaseOption(option_type=opt_type, notice_deadline=deadline,
                                        term_months=months or None, description=label + text))
@@ -389,8 +392,13 @@ def render_lease_pdf(a: LeaseAbstract, t: DemoTenant) -> bytes:
     return buf.getvalue()
 
 
-def make_scanned(pdf_bytes: bytes, seed: int) -> bytes:
-    """Turn a text PDF into an image-only PDF that looks like a photocopy."""
+def make_scanned(pdf_bytes: bytes, seed: int, *, resolution: int = 110, blur: float = 0.5,
+                 max_rotate: float = 1.2, speckle: float = 0.0) -> bytes:
+    """Turn a text PDF into an image-only PDF that looks like a photocopy.
+
+    ``speckle`` is the fraction of pixels flipped to toner dots or dropouts, as on an
+    old or much-copied page.
+    """
     import pdfplumber
     from PIL import Image, ImageFilter, ImageOps
 
@@ -398,13 +406,19 @@ def make_scanned(pdf_bytes: bytes, seed: int) -> bytes:
     pages: list[Image.Image] = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
-            img = page.to_image(resolution=110).original.convert("L")
-            img = img.rotate(rng.uniform(-1.2, 1.2), expand=False, fillcolor=255, resample=Image.BICUBIC)
-            img = img.filter(ImageFilter.GaussianBlur(0.5))
+            img = page.to_image(resolution=resolution).original.convert("L")
+            img = img.rotate(rng.uniform(-max_rotate, max_rotate), expand=False, fillcolor=255,
+                             resample=Image.BICUBIC)
+            img = img.filter(ImageFilter.GaussianBlur(blur))
+            if speckle:
+                px = img.load()
+                for _ in range(int(img.width * img.height * speckle)):
+                    x, y = rng.randrange(img.width), rng.randrange(img.height)
+                    px[x, y] = 40 if rng.random() < 0.6 else 255
             img = ImageOps.autocontrast(img, cutoff=2)
             pages.append(img.convert("RGB"))
     out = io.BytesIO()
-    pages[0].save(out, format="PDF", save_all=True, append_images=pages[1:], resolution=110)
+    pages[0].save(out, format="PDF", save_all=True, append_images=pages[1:], resolution=resolution)
     return out.getvalue()
 
 

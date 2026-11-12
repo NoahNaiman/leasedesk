@@ -16,3 +16,4 @@ data/
 demo_output/
 .claude/
 sandbox/
+benchmark_results/
