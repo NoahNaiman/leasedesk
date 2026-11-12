@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import anthropic
 import pydantic
@@ -50,6 +50,8 @@ If a lease sets no separate rent commencement date, rent commences on the Commen
 unusual landlord obligations, rent abatement, kick-out clauses) in notes."""
 
 USER_PROMPT = "Abstract this lease document."
+MAX_TOKENS = 16000
+EFFORT = "high"
 
 
 class ExtractionError(Exception):
@@ -96,9 +98,9 @@ def abstract_pdf(client: anthropic.Anthropic, pdf_path: Path) -> ExtractionResul
     try:
         response = client.beta.messages.create(
             model=config.EXTRACTION_MODEL,
-            max_tokens=16000,
+            max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
-            output_config={"effort": "high",
+            output_config={"effort": EFFORT,
                            "format": {"type": "json_schema", "schema": wire_format.WIRE_SCHEMA}},
             # If a request is ever declined by a safety classifier, retry it on a fallback model.
             betas=["server-side-fallback-2026-07-01"],

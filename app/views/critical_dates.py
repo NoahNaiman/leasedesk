@@ -2,8 +2,8 @@ from datetime import date
 
 import streamlit as st
 
-from leasedesk import db, portfolio
 from app import ui
+from leasedesk import db, portfolio
 
 today = date.today()
 approved = ui.records(db.STATUS_APPROVED)

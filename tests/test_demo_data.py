@@ -22,14 +22,14 @@ def test_every_demo_lease_has_consistent_terms():
 
 
 def test_natural_breakpoint_equals_base_rent_over_rate():
-    golden = next(l for l in demo_data.build_demo_portfolio(TODAY) if l.abstract.suite == "B-150")
+    golden = next(lease for lease in demo_data.build_demo_portfolio(TODAY) if lease.abstract.suite == "B-150")
     pr = golden.abstract.percentage_rent
     annual = golden.abstract.base_rent_schedule[0].monthly_rent * 12
     assert pr.breakpoint_amount == round(annual / (pr.rate_pct / 100), 2)
 
 
 def test_demo_has_upcoming_deadlines_to_show():
-    abstracts = [l.abstract for l in demo_data.build_demo_portfolio(TODAY)]
+    abstracts = [lease.abstract for lease in demo_data.build_demo_portfolio(TODAY)]
     soon = [o for a in abstracts for o in a.options
             if o.option_type == OptionType.RENEWAL and 0 <= (o.notice_deadline - TODAY).days <= 90]
     assert soon, "demo should include a renewal notice due within 90 days"
@@ -58,7 +58,7 @@ def test_each_option_in_a_series_has_its_own_deadline():
 
     from leasedesk import demo_data
 
-    leases = {l.abstract.trade_name: l.abstract for l in demo_data.build_demo_portfolio(date(2026, 11, 11))}
+    leases = {lease.abstract.trade_name: lease.abstract for lease in demo_data.build_demo_portfolio(date(2026, 11, 11))}
     brightside = leases["Brightside Pharmacy"]
     deadlines = [o.notice_deadline for o in brightside.options]
     assert len(deadlines) == 3

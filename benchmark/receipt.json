@@ -1,0 +1,21 @@
+{
+  "fingerprint": "aead496b76bcd016",
+  "model": "claude-opus-5-5",
+  "run_at": "2026-11-11T18:20:50",
+  "results": [
+    {
+      "set": "standard",
+      "accuracy": 1.0,
+      "correct": 338,
+      "total": 338,
+      "cost": 1.365044
+    },
+    {
+      "set": "hard",
+      "accuracy": 1.0,
+      "correct": 249,
+      "total": 249,
+      "cost": 1.04232
+    }
+  ]
+}

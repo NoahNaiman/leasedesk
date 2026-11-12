@@ -107,3 +107,11 @@ def test_rent_commencement_defaults_to_commencement_for_leases_only():
     assert extraction.apply_conventions(stated).rent_commencement_date == date(2025, 8, 1)
     amendment = LeaseAbstract(document_type=DocumentType.AMENDMENT, commencement_date=date(2030, 5, 1))
     assert extraction.apply_conventions(amendment).rent_commencement_date is None
+
+
+def test_the_suite_cannot_reach_the_network():
+    """Guards the claim that the suite runs fully offline (see the no_network fixture)."""
+    import socket
+
+    with pytest.raises(RuntimeError, match="must not use the network"):
+        socket.create_connection(("203.0.113.1", 443), timeout=1)  # a documentation-only IP

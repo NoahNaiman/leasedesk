@@ -377,8 +377,11 @@ def h4_lease_with_amendment() -> HardCase:
                   f"Term: five (5) years from {long_date(comm)} through {long_date(orig_exp)}.",
                   f"Security Deposit: {money(4000.00)}.", "Tenant's Proportionate Share: 2.50%."])
     d.h("BASE RENT")
-    d.table([["Period", "Monthly Base Rent"]] + [[f"{starts[i]:%m/%d/%Y} - {starts[i + 1] - relativedelta(days=1):%m/%d/%Y}",
-                                                   money(r)] for i, r in enumerate(orig)])
+    def period(start: date, next_start: date) -> str:
+        return f"{start:%m/%d/%Y} - {next_start - relativedelta(days=1):%m/%d/%Y}"
+
+    d.table([["Period", "Monthly Base Rent"]] + [[period(starts[i], starts[i + 1]), money(r)]
+                                                 for i, r in enumerate(orig)])
     d.h("RECOVERIES")
     d.p("Tenant shall pay Tenant's Proportionate Share of CAM, Taxes and Insurance. CAM includes an administrative "
         "fee of fifteen percent (15%).")
@@ -394,9 +397,9 @@ def h4_lease_with_amendment() -> HardCase:
     d.p(f"1. Extension. The Term is extended for five (5) years, from {long_date(orig_exp + relativedelta(days=1))} "
         f"through {long_date(ext_exp)} (the \"Extended Term\").")
     d.p("2. Base Rent. Base Rent during the Extended Term shall be as follows:")
-    d.table([["Period", "Monthly Base Rent"]] + [[f"{starts[5 + i]:%m/%d/%Y} - "
-                                                   f"{(starts[6 + i] if 6 + i < 10 else ext_exp + relativedelta(days=1)) - relativedelta(days=1):%m/%d/%Y}",
-                                                   money(r)] for i, r in enumerate(ext)])
+    ext_starts = starts[5:] + [ext_exp + relativedelta(days=1)]
+    d.table([["Period", "Monthly Base Rent"]] + [[period(ext_starts[i], ext_starts[i + 1]), money(r)]
+                                                 for i, r in enumerate(ext)])
     d.p("3. Option. The option to renew in the Lease is deleted. Tenant shall have one (1) option to extend the "
         "Extended Term for five (5) years by written notice given not less than six (6) months prior to the "
         "expiration of the Extended Term.")
@@ -633,7 +636,7 @@ def h10_distractors_and_exhibits() -> HardCase:
     _basic(d, a, [f"Premises: Suite {a.suite}, {CENTER}, {ADDRESS}; {sf:,} square feet (after demising).",
                   f"Commencement Date: {long_date(comm)}.  Rent Commencement Date: {long_date(rcd)}.",
                   "Term: ending on the last day of the sixtieth (60th) month after the Rent Commencement Date.",
-                  f"Base Rent: $22.00 per square foot per year for the entire Term, payable monthly.",
+                  "Base Rent: $22.00 per square foot per year for the entire Term, payable monthly.",
                   f"Security Deposit: {dollars_in_words(deposit)}.",
                   "Tenant pays its Proportionate Share, 4.75%, of CAM, Real Estate Taxes and Insurance. "
                   "Administrative Fee: twelve percent (12%) of CAM.",

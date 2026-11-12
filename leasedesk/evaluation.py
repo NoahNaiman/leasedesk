@@ -60,7 +60,9 @@ def values_match(expected, actual, rel_tol: float = 0.005) -> bool:
     return _norm_text(str(expected)) == _norm_text(str(actual))
 
 
-def compare(expected: LeaseAbstract, actual: LeaseAbstract) -> list[FieldResult]:
+def compare(expected: LeaseAbstract, actual: LeaseAbstract, rel_tol: float = 0.005) -> list[FieldResult]:
+    """Field-by-field comparison. ``rel_tol`` is the numeric tolerance: the benchmark allows
+    0.5% for rounding differences; measuring human corrections uses 0 (exact to the cent)."""
     results: list[FieldResult] = []
 
     def check(name, e, a):
@@ -69,7 +71,7 @@ def compare(expected: LeaseAbstract, actual: LeaseAbstract) -> list[FieldResult]
         elif isinstance(e, str) and isinstance(a, str) and name == "suite":
             ok = _norm_suite(e) == _norm_suite(a)
         else:
-            ok = values_match(e, a)
+            ok = values_match(e, a, rel_tol)
         results.append(FieldResult(name, e, a, ok))
 
     for f in SCALAR_FIELDS:
@@ -99,3 +101,26 @@ def compare(expected: LeaseAbstract, actual: LeaseAbstract) -> list[FieldResult]
 
 def accuracy(results: list[FieldResult]) -> float:
     return sum(r.correct for r in results) / len(results) if results else 0.0
+
+
+CITABLE_FIELDS = SCALAR_FIELDS + [f"recoveries.{f}" for f in RECOVERY_FIELDS] + [
+    "base_rent_schedule", "options", "percentage_rent"]
+
+
+def _has_value(a: LeaseAbstract, name: str) -> bool:
+    value = getattr(a.recoveries, name.split(".", 1)[1]) if name.startswith("recoveries.") else getattr(a, name)
+    return value not in (None, [], "") and getattr(value, "value", None) != "unknown"
+
+
+def citation_coverage(a: LeaseAbstract) -> tuple[int, int]:
+    """(cited, total): how many of the scored fields that have a value also have an evidence entry.
+
+    Evidence fields are matched by name, ignoring list indexes and sub-fields
+    ("options[0].notice_deadline" counts for "options").
+    """
+    cited = set()
+    for e in a.evidence:
+        name = re.sub(r"\[.*?\]", "", e.field)
+        cited.add(".".join(name.split(".")[:2]) if name.startswith("recoveries.") else name.split(".")[0])
+    filled = [f for f in CITABLE_FIELDS if _has_value(a, f)]
+    return sum(f in cited for f in filled), len(filled)
