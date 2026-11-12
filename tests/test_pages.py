@@ -21,6 +21,7 @@ PAGES = {
     "views/tenants.py": "Tenants",
     "views/library.py": "Lease library",
     "views/critical_dates.py": "Critical dates",
+    "views/insurance.py": "Insurance",
     "views/rent_roll.py": "Rent roll check",
     "views/distributions.py": "Partner distributions",
     "views/import_leases.py": "Import leases",
@@ -161,3 +162,19 @@ def test_distributions_page_previews_and_records_a_distribution(app):
     next(b for b in at.button if b.label == "Record this distribution").click().run()
     with db.connect() as conn:
         assert len(dist.list_distributions(conn, willow.id)) == before + 1
+
+
+def test_insurance_page_lists_every_status_and_saves_a_certificate(app):
+    from leasedesk import insurance
+
+    at = app.open("views/insurance.py")
+    statuses = set(at.dataframe[0].value["Status"])
+    assert {insurance.STATUS_MISSING, insurance.STATUS_EXPIRED, insurance.STATUS_LOW_LIMITS,
+            insurance.STATUS_NOT_ADDITIONAL, insurance.STATUS_EXPIRING, insurance.STATUS_CURRENT} <= statuses
+    assert any("no current certificate" in e.value for e in at.error)
+    # Raise the requirement: tenants with $1M per occurrence (and no umbrella) fall below it.
+    next(n for n in at.number_input if n.label == "GL each occurrence").set_value(2_000_000.0)
+    next(b for b in at.button if b.label == "Save requirements").click().run()
+    with db.connect() as conn:
+        assert insurance.get_requirements(conn).gl_each_occurrence == 2_000_000
+    assert (at.dataframe[0].value["Status"] == insurance.STATUS_LOW_LIMITS).sum() >= 3

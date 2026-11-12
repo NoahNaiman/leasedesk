@@ -18,6 +18,7 @@ pages = {
         st.Page("views/tenants.py", title="Tenants", icon=":material/storefront:"),
         st.Page("views/library.py", title="Lease library", icon=":material/menu_book:"),
         st.Page("views/critical_dates.py", title="Critical dates", icon=":material/event:"),
+        st.Page("views/insurance.py", title="Insurance", icon=":material/verified_user:"),
     ],
     "Accounting": [
         st.Page("views/rent_roll.py", title="Rent roll check", icon=":material/receipt_long:"),

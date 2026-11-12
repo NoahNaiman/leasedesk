@@ -223,6 +223,7 @@ class Sandbox:
     files: list[SandboxFile]
     exports_dir: Path | None = None
     rent_roll_planted: list = field(default_factory=list)   # answer key for the rent roll check
+    coi_expected: dict = field(default_factory=dict)        # tenant -> expected insurance status
 
 
 def build_sandbox(folder: Path, today: date | None = None) -> Sandbox:
@@ -278,4 +279,5 @@ def build_sandbox(folder: Path, today: date | None = None) -> Sandbox:
                                                        db.list_documents(conn, db.STATUS_REVIEW), today)
         (exports_dir / sandbox_exports.RENT_ROLL_FILE).write_bytes(csv_bytes)
         sandbox_exports.seed_partnerships(conn, today)
-    return Sandbox(folder, root, data_dir, files, exports_dir, planted)
+        coi_expected = sandbox_exports.seed_certificates(conn, root, today)
+    return Sandbox(folder, root, data_dir, files, exports_dir, planted, coi_expected)

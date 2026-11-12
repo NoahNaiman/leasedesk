@@ -8,9 +8,16 @@ linked to the page and quote it came from. A person reviews each abstract, side 
 lease, before it is used. Approved abstracts feed a searchable lease library and a calendar of
 expirations, option deadlines and rent increases, exportable to Excel and to calendar apps.
 
-LeaseDesk is in use at a small commercial real estate company. It is being rolled out across the
-company's retail lease portfolio, one property at a time: so far, one of 31 properties (22 lease
-documents) has been abstracted.
+LeaseDesk also builds on those terms to do three property management jobs:
+
+- **Rent roll check.** Compares an accounting system's rent roll with each lease, including its
+  amendments.
+- **Insurance tracking.** Checks each tenant's certificate of insurance against the landlord's
+  requirements.
+- **Partner distributions.** Splits partnership distributions through a preferred-return waterfall.
+
+LeaseDesk is in use at a small commercial real estate company. All 31 of its properties (261 lease
+documents) have been abstracted, and review of the abstracts is under way.
 
 ## Sample output
 
@@ -58,6 +65,9 @@ property folders ──► library.py: index files, pick out lease documents (ru
              merge.py: each tenant's lease + amendments → current terms, with sources
              portfolio.py: properties, tenants, critical dates, Excel and .ics export
              corrections.py: how often reviewers changed the AI draft
+             rentroll.py: billed rent (accounting export) vs. merged lease terms
+             insurance.py: certificates of insurance vs. requirements (Claude reads the PDF)
+             distributions.py: pro rata and waterfall partner distributions
 ```
 
 - **UI:** Streamlit, under `app/` (one file per page).
@@ -72,8 +82,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 LEASEDESK_DATA_DIR=sandbox/data .venv/bin/streamlit run app/main.py
 ```
 
-- **The sandbox:** two fictional shopping centers, laid out the way real property folders are, with
-  documents in every review state.
+- **The sandbox:** two fictional shopping centers, laid out the way real property folders are. It
+  includes:
+  - documents in every review state
+  - a fictional rent roll export with one of each billing problem planted in it
+  - insurance certificates covering every status
+  - two partnerships with distribution histories, one of which reaches the promote
 - **Your own leases:** add an Anthropic API key on the Settings page, then point the Import page at
   a folder with one subfolder per property.
 - **Without the command line:** on macOS, double-click `Start LeaseDesk.command`, or
@@ -203,7 +217,7 @@ workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` s
 ## Testing
 
 ```bash
-.venv/bin/pytest        # 126 tests, about 40 seconds
+.venv/bin/pytest        # 165 tests, about 40 seconds
 ```
 
 - **Offline:** the suite runs with no network access. The Anthropic API is replaced by an httpx
@@ -228,11 +242,18 @@ workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` s
 - **Current rent can be missing.** When the documents don't state it (for example, an extension
   that keeps CPI-adjusted rent), it has to come from the accounting system.
 - **Not every value is cited.** Citation coverage is about 73%.
-- **Some files are out of reach.** PDFs only, up to 32 MB and 600 pages. Leases saved only as Word
-  files are skipped.
+- **Some files are out of reach.** PDFs only, up to 600 pages. Files over 23 MB are sent as
+  compressed page images. Leases saved only as Word files are skipped.
 - **Single user, single machine.** There's no multi-user access control.
-- **Planned, not built:** rent roll checks against Yardi exports, CAM reconciliation, and partner
-  distribution waterfalls.
+- **Rent roll formats vary.** The rent roll import was built without a real accounting export to
+  hand. It finds columns by common header names, and they can be remapped by hand, but an unusual
+  export may need its mapping adjusted.
+- **Insurance requirements are portfolio-wide.** One set of minimums applies to every tenant; lease-
+  by-lease insurance clauses aren't extracted yet.
+- **Waterfalls have one shape.** Preferred return (simple, accruing daily), then return of capital,
+  then a residual split with one promote tier. Catch-up provisions and multiple IRR hurdles aren't
+  modeled.
+- **Planned, not built:** CAM reconciliation.
 
 ## How it was built
 

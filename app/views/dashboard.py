@@ -3,7 +3,7 @@ from datetime import date
 import streamlit as st
 
 from app import ui
-from leasedesk import corrections, db, demo_data, portfolio
+from leasedesk import corrections, db, demo_data, insurance, portfolio
 
 today = date.today()
 all_records = ui.records()
@@ -53,6 +53,14 @@ if counts[db.STATUS_PENDING] or counts[db.STATUS_FAILED]:
     st.warning(f"{counts[db.STATUS_PENDING]} uploaded lease(s) not yet abstracted, "
                f"{counts[db.STATUS_FAILED]} failed.", icon=":material/pending:")
     st.page_link("views/import_leases.py", label="Go to Import leases", icon=":material/arrow_forward:")
+
+with db.connect() as conn:
+    coverage = insurance.tenant_insurance(portfolio.tenant_groups(approved), insurance.list_certificates(conn),
+                                          insurance.get_requirements(conn), today)
+uninsured = sum(r.status in (insurance.STATUS_MISSING, insurance.STATUS_EXPIRED) for r in coverage)
+if uninsured:
+    st.warning(f"{uninsured} tenant(s) have no current insurance certificate on file.", icon=":material/gpp_bad:")
+    st.page_link("views/insurance.py", label="Review insurance", icon=":material/arrow_forward:")
 
 st.subheader("Coming up in the next 90 days")
 events = portfolio.critical_dates(approved, today, days_ahead=90)

@@ -117,3 +117,65 @@ def seed_partnerships(conn, today: date) -> None:
         if p is willow and today >= date(2025, 6, 30):
             dist.record_distribution(conn, pid, dist.Distribution(date(2025, 6, 30), 5_600_000,
                                                                   "Refinance proceeds"))
+
+
+# --------------------------------------------------------------------------- insurance certificates
+
+# One scenario per tenant, so the Insurance page shows every status. Days are relative to today.
+COI_SCENARIOS = {
+    "FreshWay Market": dict(days=200, occ=2_000_000, agg=4_000_000, umbrella=5_000_000, ai=True),
+    "Brightside Pharmacy": dict(days=150, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
+    "Copper Kettle Coffee": dict(days=18, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
+    "Summit Fitness": dict(days=-40, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
+    "Golden Dragon Kitchen": dict(days=120, occ=500_000, agg=1_000_000, umbrella=None, ai=True),
+    "Paws & Claws Pet Supply": dict(days=90, occ=1_000_000, agg=2_000_000, umbrella=None, ai=False),
+    "Harbor Mattress": dict(days=240, occ=500_000, agg=1_000_000, umbrella=1_000_000, ai=True),
+    "Sunrise Bagels": dict(days=75, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
+    "Tri-County Bank": dict(days=300, occ=2_000_000, agg=4_000_000, umbrella=10_000_000, ai=True),
+    # QuickShip Mailing has no certificate on file.
+}
+CARRIERS = ["Front Range Mutual Insurance Co.", "Prairie Casualty Company", "Summit Specialty Insurance"]
+
+
+def seed_certificates(conn, root, today: date) -> dict[str, str]:
+    """Write a fictional certificate PDF into each tenant's Insurance folder and record what it says.
+
+    Returns tenant -> expected status, the answer key for the Insurance page.
+    """
+    from pathlib import Path, PurePosixPath
+
+    from leasedesk import db, insurance
+    from leasedesk.sandbox import text_pdf
+
+    insurance.save_requirements(conn, insurance.Requirements())
+    expected = {}
+    groups = portfolio.tenant_groups(db.list_documents(conn, db.STATUS_APPROVED))
+    for i, g in enumerate(groups):
+        s = COI_SCENARIOS.get(g.name)
+        if s is None:
+            expected[g.name] = insurance.STATUS_MISSING
+            continue
+        expires = today + relativedelta(days=s["days"])
+        cert = insurance.Certificate(
+            insured_name=g.terms.tenant_name, carrier=CARRIERS[i % len(CARRIERS)], policy_number=f"GL-{40812 + i}",
+            effective_date=expires - relativedelta(years=1), expiration_date=expires,
+            gl_each_occurrence=s["occ"], gl_aggregate=s["agg"], umbrella_limit=s["umbrella"],
+            additional_insured=s["ai"], certificate_holder=f"{g.terms.landlord}, c/o its managing agent")
+        lines = [f"INSURED: {cert.insured_name}", f"INSURER: {cert.carrier}",
+                 f"COMMERCIAL GENERAL LIABILITY, policy {cert.policy_number}, effective "
+                 f"{cert.effective_date:%m/%d/%Y}, expires {cert.expiration_date:%m/%d/%Y}.",
+                 f"Each occurrence ${cert.gl_each_occurrence:,.0f}; general aggregate ${cert.gl_aggregate:,.0f}."]
+        if cert.umbrella_limit:
+            lines.append(f"UMBRELLA LIABILITY: each occurrence and aggregate ${cert.umbrella_limit:,.0f}.")
+        lines.append("ADDITIONAL INSURED: The certificate holder is included as additional insured with respect to "
+                     "general liability." if cert.additional_insured else
+                     "This certificate is issued as a matter of information only.")
+        lines.append(f"CERTIFICATE HOLDER: {cert.certificate_holder}")
+        folder = Path(root) / PurePosixPath(g.primary.source_rel_path).parent / "Insurance"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / "Certificate of Liability Insurance.pdf"
+        path.write_bytes(text_pdf("CERTIFICATE OF LIABILITY INSURANCE", *lines))
+        insurance.save_certificate(conn, g.property, g.name, cert, source="sandbox", file_name=path.name,
+                                   stored_path=str(path))
+        expected[g.name] = insurance.assess(cert, insurance.Requirements(), today)[0]
+    return expected
