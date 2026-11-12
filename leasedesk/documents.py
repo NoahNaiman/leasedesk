@@ -49,12 +49,42 @@ def inspect_pdf(path: Path) -> PdfInfo:
         return PdfInfo(page_count=len(pages), is_scanned=text_pages < max(1, len(sample) // 2))
 
 
+def shrink_pdf(data: bytes, resolution: int = 110) -> bytes:
+    """A copy of the PDF as grayscale page images, small enough to send to the API.
+
+    Used only for very large files (usually high-resolution scans). The text layer is dropped,
+    which Claude doesn't need: it reads the page images.
+    """
+    import io
+
+    pages = []
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            pages.append(page.to_image(resolution=resolution).original.convert("L"))
+    out = io.BytesIO()
+    pages[0].save(out, format="PDF", save_all=True, append_images=pages[1:], resolution=resolution)
+    return out.getvalue()
+
+
+def pdf_for_api(path: Path) -> bytes:
+    """The PDF bytes to send for abstraction: the file itself, or a shrunken copy if it's too big.
+    The original file is never changed."""
+    data = Path(path).read_bytes()
+    if len(data) <= config.MAX_SEND_BYTES:
+        return data
+    for resolution in (110, 80):
+        smaller = shrink_pdf(data, resolution)
+        if len(smaller) <= config.MAX_SEND_BYTES:
+            return smaller
+    return smaller  # still too big: the API will say so, and the error is shown for this file
+
+
 def import_pdf_bytes(conn, file_name: str, data: bytes, *, is_demo: bool = False) -> ImportResult:
     """Store an uploaded PDF and register it in the database."""
     if not data.startswith(b"%PDF"):
         return ImportResult(file_name, None, error="Not a PDF file.")
     if len(data) > config.MAX_PDF_BYTES:
-        return ImportResult(file_name, None, error="File is larger than 32 MB. Split it into smaller PDFs.")
+        return ImportResult(file_name, None, error="File is larger than 300 MB. Split it into smaller PDFs.")
 
     config.ensure_data_dirs()
     digest = sha256_bytes(data)
