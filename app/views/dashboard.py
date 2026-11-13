@@ -1,9 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 
 import streamlit as st
 
 from app import ui
-from leasedesk import corrections, db, demo_data, insurance, portfolio
+from leasedesk import agenda, corrections, db, demo_data, insurance, portfolio
 
 today = date.today()
 all_records = ui.records()
@@ -37,8 +37,38 @@ st.title("Portfolio overview")
 if any(r.is_demo for r in all_records):
     st.caption("Showing demo data for a fictional shopping center. Remove it any time from Settings.")
 
+groups = portfolio.tenant_groups(approved)
+with db.connect() as conn:
+    certificates = insurance.list_certificates(conn)
+    requirements = insurance.get_requirements(conn)
+
+ICONS = {agenda.KIND_OPTION_DEADLINE: ":material/gavel:", agenda.KIND_OPTION_REMINDER: ":material/notifications:",
+         agenda.KIND_EXPIRATION: ":material/event_busy:", agenda.KIND_RENT_INCREASE: ":material/trending_up:",
+         agenda.KIND_COMMENCEMENT: ":material/key:", agenda.KIND_RENT_COMMENCEMENT: ":material/payments:",
+         agenda.KIND_COI_EXPIRES: ":material/gpp_bad:", agenda.KIND_COI_REMINDER: ":material/shield:"}
+
+with st.container(border=True):
+    head, pick = st.columns([3, 1], vertical_alignment="bottom")
+    day = pick.date_input("Day", today, min_value=date(1950, 1, 1), max_value=date(2100, 12, 31), format="MM/DD/YYYY",
+                      label_visibility="collapsed")
+    head.subheader("Today" if day == today else "Agenda", anchor=False)
+    head.caption(f"{day:%A, %B %-d, %Y}")
+    todays = agenda.items(groups, certificates, requirements, day)
+    if not todays:
+        st.write("Nothing scheduled for this day.")
+    for item in todays:
+        st.markdown(f"{ICONS[item.kind]} **{item.kind}** · {item.tenant}"
+                    + (f", {item.suite}" if item.suite else "") + f" · {item.property}  \n"
+                    f":gray[{item.detail}]")
+    week = agenda.items(groups, certificates, requirements, day + timedelta(days=1), day + timedelta(days=7))
+    if week:
+        with st.expander(f"Next 7 days ({len(week)})"):
+            st.dataframe(agenda.frame(week), hide_index=True, width="stretch",
+                         column_config={"Date": st.column_config.DateColumn(format="ddd, MMM D"),
+                                        "Details": st.column_config.TextColumn(width="large")})
+
 # Tenant-level figures use each tenant's merged current terms (lease plus amendments).
-tenants = portfolio.tenant_table(portfolio.tenant_groups(approved), today)
+tenants = portfolio.tenant_table(groups, today)
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Tenants", len(tenants), help=f"{len(approved)} approved documents")
 m2.metric("Leased square feet", ui.number(tenants["SF"].sum()) if not tenants.empty else "0")
@@ -54,9 +84,7 @@ if counts[db.STATUS_PENDING] or counts[db.STATUS_FAILED]:
                f"{counts[db.STATUS_FAILED]} failed.", icon=":material/pending:")
     st.page_link("views/import_leases.py", label="Go to Import leases", icon=":material/arrow_forward:")
 
-with db.connect() as conn:
-    coverage = insurance.tenant_insurance(portfolio.tenant_groups(approved), insurance.list_certificates(conn),
-                                          insurance.get_requirements(conn), today)
+coverage = insurance.tenant_insurance(groups, certificates, requirements, today)
 uninsured = sum(r.status in (insurance.STATUS_MISSING, insurance.STATUS_EXPIRED) for r in coverage)
 if uninsured:
     st.warning(f"{uninsured} tenant(s) have no current insurance certificate on file.", icon=":material/gpp_bad:")

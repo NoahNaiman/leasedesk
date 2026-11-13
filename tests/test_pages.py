@@ -70,6 +70,15 @@ def test_every_page_renders(app, page, title):
     assert not re.search(r"\bnan\b|\bNaT\b|\bNone\b", texts(at)), "a blank value was displayed raw"
 
 
+def test_dashboard_shows_todays_agenda(app):
+    at = app.open("views/dashboard.py")
+    body = texts(at)
+    assert "Today" in [s.value for s in at.subheader]
+    assert "Insurance certificate expires" in body and "Copper Kettle Coffee" in body
+    at.date_input[0].set_value(date(1990, 1, 1)).run()
+    assert "Nothing scheduled for this day." in texts(at)
+
+
 def test_properties_page_shows_folder_properties_by_display_name(app):
     at = app.open("views/properties.py")
     assert at.metric[0].value == "2"  # two included properties; the excluded one is hidden

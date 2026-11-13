@@ -8,6 +8,10 @@ linked to the page and quote it came from. A person reviews each abstract, side 
 lease, before it is used. Approved abstracts feed a searchable lease library and a calendar of
 expirations, option deadlines and rent increases, exportable to Excel and to calendar apps.
 
+The dashboard opens on the day's agenda: option notice deadlines (with reminders 90 and 30 days
+ahead), lease expirations and commencements, rent increases, and expiring insurance certificates.
+Any other day can be picked to see what falls on it.
+
 LeaseDesk also builds on those terms to do three property management jobs:
 
 - **Rent roll check.** Compares an accounting system's rent roll with each lease, including its
@@ -65,6 +69,7 @@ property folders ──► library.py: index files, pick out lease documents (ru
              merge.py: each tenant's lease + amendments → current terms, with sources
              portfolio.py: properties, tenants, critical dates, Excel and .ics export
              corrections.py: how often reviewers changed the AI draft
+             agenda.py: everything falling on a given day, for the dashboard
              rentroll.py: billed rent (accounting export) vs. merged lease terms
              insurance.py: certificates of insurance vs. requirements (Claude reads the PDF)
              distributions.py: pro rata and waterfall partner distributions
@@ -217,7 +222,7 @@ workflow (`benchmark.yml`) runs the paid benchmark when an `ANTHROPIC_API_KEY` s
 ## Testing
 
 ```bash
-.venv/bin/pytest        # 165 tests, about 40 seconds
+.venv/bin/pytest        # 173 tests, about 60 seconds
 ```
 
 - **Offline:** the suite runs with no network access. The Anthropic API is replaced by an httpx

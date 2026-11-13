@@ -121,11 +121,12 @@ def seed_partnerships(conn, today: date) -> None:
 
 # --------------------------------------------------------------------------- insurance certificates
 
-# One scenario per tenant, so the Insurance page shows every status. Days are relative to today.
+# One scenario per tenant, so the Insurance page shows every status. Days are relative to today;
+# Copper Kettle's expires today so the dashboard's agenda has an item on any day the sandbox is built.
 COI_SCENARIOS = {
     "FreshWay Market": dict(days=200, occ=2_000_000, agg=4_000_000, umbrella=5_000_000, ai=True),
     "Brightside Pharmacy": dict(days=150, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
-    "Copper Kettle Coffee": dict(days=18, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
+    "Copper Kettle Coffee": dict(days=0, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
     "Summit Fitness": dict(days=-40, occ=1_000_000, agg=2_000_000, umbrella=None, ai=True),
     "Golden Dragon Kitchen": dict(days=120, occ=500_000, agg=1_000_000, umbrella=None, ai=True),
     "Paws & Claws Pet Supply": dict(days=90, occ=1_000_000, agg=2_000_000, umbrella=None, ai=False),
